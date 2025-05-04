@@ -10,8 +10,8 @@ import * as storage from '@/utils/storage.js'
 const STORAGE_KEY = 'config'
 
 // 硬编码的API配置
-const HARDCODED_BOT_ID = '7492784309083193380' // 替换为你的Coze智能体ID
-const HARDCODED_USER_ID = 'dawdaw456' // 替换为用户唯一标识，可以是任意字符串
+const HARDCODED_BOT_ID = '7500508271048966171' // 替换为你的Coze智能体ID
+const HARDCODED_USER_ID = 'dawdaw4d56' // 替换为用户唯一标识，可以是任意字符串
 const HARDCODED_API_KEY = 'pat_ovJL6AVkQf7pUoThXzBGXoVcGH0V1EK5Qmlj3VFcgq5qA0zHZHCt2yc1UqPtqypI' // 替换为你的Coze API密钥
 const HARDCODED_BASE_URL = 'https://api.coze.cn/v3/chat' // 更新为Coze v3的API端点，与coze.py保持一致
 
