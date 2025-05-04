@@ -1,15 +1,16 @@
 // 直接复制dify.py中的核心逻辑到JavaScript
 
 // --- 配置 ---
-const API_KEY = "app-tNfG1uJfELDK8CWUb0fanZA5"
+const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t"
 const API_BASE_URL = "https://api.dify.ai/v1"
-const WORKFLOW_ENDPOINT = `${API_BASE_URL}/workflows/run`
-const USER_ID = "my_test_user_workflow_002"
+// 修改API端点为对话型应用接口
+const CHAT_ENDPOINT = `${API_BASE_URL}/chat-messages`
+const USER_ID = "my_test_user_002"
 
 // 全局对话历史记录状态
 const CONVERSATION_HISTORY = {};
 // --- 配置结束 ---
-
+	
 // 返回API配置信息
 export function loadConfig() {
 	return {
@@ -39,29 +40,26 @@ export function formatContextForWorkflow(history, currentQuery) {
 	return formattedLines.join('\n');
 }
 
-// 主要的工作流调用函数
-export async function runDifyWorkflowStream(query, conversationId = null, onDataCallback, onDoneCallback, onErrorCallback) {
+// 主要的API调用函数
+export async function runDifyWorkflowStream(
+	query, 
+	conversationId = null, 
+	onDataCallback, 
+	onDoneCallback, 
+	onErrorCallback,
+	messageHistory = null
+) {
 	try {
-		console.log(`[DEBUG] 开始调用工作流，conversation_id=${conversationId}`);
+		console.log(`[DEBUG] 开始调用对话API，conversation_id=${conversationId}`);
 		
-		// 获取对话历史
-		let history = [];
-		if (conversationId && CONVERSATION_HISTORY[conversationId]) {
-			history = CONVERSATION_HISTORY[conversationId];
-			console.log(`[DEBUG] 找到历史记录，长度: ${history.length}`);
-		}
-		
-		// 格式化输入
-		const contextString = formatContextForWorkflow(history, query);
-		console.log(`[DEBUG] 格式化的上下文: ${contextString}`);
-		
-		// 准备请求
+		// 准备请求体 - 严格按照Dify对话型应用API格式
 		const payload = {
-			inputs: {
-				context: contextString
-			},
+			query: query,
 			response_mode: "streaming",
-			user: USER_ID
+			user: USER_ID,
+			inputs: {
+				text: query  // 添加必需的text字段
+			}
 		};
 		
 		// 如果有conversation_id，添加到请求中
@@ -70,8 +68,10 @@ export async function runDifyWorkflowStream(query, conversationId = null, onData
 			console.log(`[DEBUG] 添加会话ID到请求: ${conversationId}`);
 		}
 		
+		console.log(`[DEBUG] 请求参数: `, JSON.stringify(payload));
+		
 		// 发送请求
-		const response = await fetch(WORKFLOW_ENDPOINT, {
+		const response = await fetch(CHAT_ENDPOINT, {
 			method: 'POST',
 			headers: {
 				'Authorization': `Bearer ${API_KEY}`,
@@ -85,7 +85,7 @@ export async function runDifyWorkflowStream(query, conversationId = null, onData
 			const errorText = await response.text();
 			console.error(`[ERROR] 请求失败: ${response.status}`);
 			console.error(`[ERROR] 响应内容: ${errorText}`);
-			throw new Error(`工作流调用失败: ${response.statusText}`);
+			throw new Error(`对话API调用失败: ${response.statusText}`);
 		}
 		
 		// 处理流式响应
@@ -108,11 +108,11 @@ export async function runDifyWorkflowStream(query, conversationId = null, onData
 			
 			buffer += decoder.decode(value, { stream: true });
 			
-			// 按行处理数据
+			// 按行处理数据，Dify的SSE响应格式是data: {...}\n\n
 			let lineEndIndex;
-			while ((lineEndIndex = buffer.indexOf('\n')) !== -1) {
+			while ((lineEndIndex = buffer.indexOf('\n\n')) !== -1) {
 				const line = buffer.substring(0, lineEndIndex);
-				buffer = buffer.substring(lineEndIndex + 1);
+				buffer = buffer.substring(lineEndIndex + 2);
 				
 				// 处理数据行，它应该以 "data:" 开头
 				if (line.startsWith('data:')) {
@@ -131,39 +131,35 @@ export async function runDifyWorkflowStream(query, conversationId = null, onData
 							let content = '';
 							
 							// 根据事件类型提取数据
-							if (data.event === 'agent_message' || 
-								data.event === 'message' || 
-								data.event === 'chunk' || 
-								data.event === 'text_chunk') {
-								
-								// 尝试从不同位置获取内容
+							if (data.event === 'message') {
+								// 消息事件，包含answer字段
 								if (data.answer) {
 									content = data.answer;
-								} else if (data.data && typeof data.data === 'object') {
-									if (data.data.text) {
-										content = data.data.text;
-									} else if (data.data.message) {
-										content = data.data.message;
-									} else if (data.data.content) {
-										content = data.data.content;
-									}
 								}
 								
 								if (content) {
+									console.log(`[DEBUG] 接收消息块: ${content}`);
 									fullResponse += content;
 									if (onDataCallback) {
 										onDataCallback(data, content);
 									}
 								}
+							} else if (data.event === 'message_end') {
+								// 消息结束事件，可以获取元数据
+								console.log(`[DEBUG] 消息结束`);
+								if (data.metadata) {
+									console.log(`[DEBUG] 使用元数据: `, JSON.stringify(data.metadata));
+								}
 							} else if (data.event === 'error') {
-								const errorMsg = data.message || 'Unknown stream error';
+								// 错误事件
+								const errorMsg = data.message || '未知流式错误';
 								console.error(`[ERROR] 流错误: ${errorMsg}`);
 								if (onErrorCallback) {
 									onErrorCallback(new Error(errorMsg));
 								}
 							}
 						} catch (e) {
-							console.warn(`[WARN] JSON解析错误: ${e.message}`);
+							console.warn(`[WARN] JSON解析错误: ${e.message}, 原始数据: ${jsonStr}`);
 						}
 					}
 				}
@@ -200,7 +196,7 @@ export async function runDifyWorkflowStream(query, conversationId = null, onData
 			response: fullResponse
 		};
 	} catch (error) {
-		console.error(`[ERROR] 工作流调用异常: ${error.message}`);
+		console.error(`[ERROR] 对话API调用异常: ${error.message}`);
 		if (onErrorCallback) {
 			onErrorCallback(error);
 		}
