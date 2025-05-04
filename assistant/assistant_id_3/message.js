@@ -16,6 +16,9 @@ let currentConversationId = null;
 
 // 主要的响应获取函数
 export async function getResponse(messages) {
+	console.log(`[MESSAGE] 处理对话历史记录，共 ${messages.length} 条消息`);
+	console.log(`[MESSAGE] 当前对话ID: ${currentConversationId}`);
+	
 	// 提取用户最后一条消息内容
 	let userMessage = '';
 	for (let i = messages.length - 1; i >= 0; i--) {
@@ -25,8 +28,7 @@ export async function getResponse(messages) {
 		}
 	}
 	
-	console.log(`[MESSAGE] 开始处理用户消息: ${userMessage.substring(0, 50)}...`);
-	console.log(`[MESSAGE] 当前对话ID: ${currentConversationId}`);
+	console.log(`[MESSAGE] 用户当前消息: ${userMessage.substring(0, 50)}...`);
 	
 	// 创建一个异步迭代器来处理流式响应
 	const streamAsync = async function* () {
@@ -38,7 +40,7 @@ export async function getResponse(messages) {
 			
 			// 创建一个Promise来等待响应完成
 			const responsePromise = new Promise((resolve, reject) => {
-				// 调用Dify工作流API，使用直接的回调处理方式
+				// 调用Dify对话API，传递完整消息历史以保持上下文
 				runDifyWorkflowStream(
 					userMessage,           // 用户当前消息
 					currentConversationId, // 当前对话ID
@@ -57,20 +59,21 @@ export async function getResponse(messages) {
 						}
 					},
 					() => {  // 完成回调
-						console.log(`[MESSAGE] 工作流响应完成`);
+						console.log(`[MESSAGE] 对话响应完成`);
 						responseComplete = true;
 						resolve();
 					},
 					(error) => {  // 错误回调
-						console.error(`[MESSAGE] 工作流错误: ${error.message}`);
+						console.error(`[MESSAGE] 对话错误: ${error.message}`);
 						responseError = error;
 						responseComplete = true;
 						reject(error);
-					}
+					},
+					messages  // 添加完整消息历史作为新参数
 				).then(result => {
 					// 处理结果，保存会话ID
 					if (result && result.conversationId) {
-						console.log(`[MESSAGE] 新的会话ID: ${result.conversationId}`);
+						console.log(`[MESSAGE] 会话ID: ${result.conversationId}`);
 						currentConversationId = result.conversationId;
 					}
 					responseComplete = true;
