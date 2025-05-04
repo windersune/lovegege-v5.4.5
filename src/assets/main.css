@@ -1,0 +1,224 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 全局样式设置 */
+body {
+  @apply bg-background text-gray-800 font-sans;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: rgba(243, 244, 246, 0.8);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(186, 1, 251, 0.3);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(186, 1, 251, 0.5);
+}
+
+/* 页面过渡动画 */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* 界面元素动画 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease forwards;
+}
+
+/* 提示工具 */
+.tooltip {
+  @apply invisible absolute;
+}
+
+.has-tooltip:hover .tooltip {
+  @apply visible z-50;
+}
+
+/* 卡片悬浮效果 */
+.hover-lift {
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.hover-lift:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* 渐变背景 */
+.gradient-header {
+  background: linear-gradient(135deg, #9c27b0 0%, #ba01fb 50%, #8e24aa 100%);
+  height: 180px;
+  position: relative;
+  overflow: hidden;
+}
+
+.gradient-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%);
+}
+
+/* 助手卡片样式 */
+.assistant-card {
+  @apply bg-white rounded-xl shadow-md p-5 transition-all duration-300;
+  border: 1px solid rgba(186, 1, 251, 0.1);
+}
+
+.assistant-card:hover {
+  @apply shadow-lg;
+  border-color: rgba(186, 1, 251, 0.3);
+}
+
+.assistant-card.disabled {
+  @apply opacity-70 cursor-not-allowed;
+}
+
+/* 按钮样式 */
+.btn {
+  @apply px-4 py-2 rounded-lg transition-all duration-200 font-medium;
+}
+
+.btn-primary {
+  @apply bg-primary text-white hover:bg-purple-700;
+}
+
+.btn-secondary {
+  @apply bg-gray-100 text-gray-700 hover:bg-gray-200;
+}
+
+.btn-sm {
+  @apply px-3 py-1 text-sm;
+}
+
+/* 消息气泡样式 */
+.message-bubble {
+  @apply rounded-lg p-3 max-w-[85%] break-words shadow-sm;
+}
+
+.user-message {
+  @apply bg-user-message ml-auto border border-blue-100;
+}
+
+.ai-message {
+  @apply bg-ai-message mr-auto border border-purple-100;
+}
+
+.input-area {
+  @apply bg-white border border-gray-300 rounded-lg p-2 flex items-end transition-all;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.input-area:focus-within {
+  @apply border-gray-300;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+}
+
+/* Markdown 样式 */
+.markdown-content h1 {
+  @apply text-2xl font-bold my-4;
+}
+
+.markdown-content h2 {
+  @apply text-xl font-bold my-3;
+}
+
+.markdown-content h3 {
+  @apply text-lg font-bold my-2;
+}
+
+.markdown-content p {
+  @apply my-2;
+}
+
+.markdown-content ul, .markdown-content ol {
+  @apply pl-5 my-2;
+}
+
+.markdown-content ul {
+  @apply list-disc;
+}
+
+.markdown-content ol {
+  @apply list-decimal;
+}
+
+.markdown-content code {
+  @apply bg-gray-100 px-1 py-0.5 rounded text-sm;
+}
+
+.markdown-content pre {
+  @apply bg-gray-100 p-3 rounded my-2 overflow-x-auto;
+}
+
+.markdown-content blockquote {
+  @apply border-l-4 border-gray-300 pl-4 italic my-2;
+}
+
+.markdown-content a {
+  @apply text-primary underline;
+}
+
+.markdown-content table {
+  @apply border-collapse border border-gray-300 my-2 w-full;
+}
+
+.markdown-content th, .markdown-content td {
+  @apply border border-gray-300 p-2;
+}
+
+.markdown-content th {
+  @apply bg-gray-50;
+}
+
+/* 加载动画 */
+.loading-dots:after {
+  content: '';
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% { content: '.'; }
+  33% { content: '..'; }
+  66% { content: '...'; }
+}
+
+/* 响应式设计 */
+@media (max-width: 640px) {
+  .message-bubble {
+    @apply max-w-[90%];
+  }
+  
+  .gradient-header {
+    height: 140px;
+  }
+}
