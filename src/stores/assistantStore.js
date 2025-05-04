@@ -22,7 +22,7 @@ export const useAssistantStore = defineStore('assistant', {
       {
         id: '3',
         name: 'Gemini小美女',
-        description: '出身于Gemini-2.5-Flash-preview-0417，以我娇贵的女孩身姿，硬刚GPT。',
+        description: '出身于Gemini2.5pro-exp，以我娇贵的女孩身姿，硬刚GPT，反应稍慢，但不在话下。',
         avatar: '/images/general-assistant.jpg',
         available: true,
         supportsImage: true
@@ -38,7 +38,7 @@ export const useAssistantStore = defineStore('assistant', {
       {
         id: '5',
         name: 'kimi小老头',
-        description: '躬耕于kimi，小伙子不要急，你不会的，我都会，哈哈哈',
+        description: '躬耕于kimi，小伙子急嘛，找我，，哈哈哈',
         avatar: '/images/thinking-assistant.jpg',
         available: true,
         supportsImage: true
