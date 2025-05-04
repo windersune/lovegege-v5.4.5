@@ -13,17 +13,17 @@ export const useAssistantStore = defineStore('assistant', {
       },
       {
         id: '2',
-        name: '流浪小猪猪',
-        description: '目前在流浪，没有师父配置我，呜呜呜',
-        avatar: '/images/beiyong.jpg',
+        name: '奇门老朽木',
+        description: '老了，不中用了，只能讲讲格局了，唉~',
+        avatar: '/images/qimen-assistant.jpg',
         available: true,
         supportsImage: true
       },
       {
         id: '3',
-        name: '奇门老朽木',
-        description: '老了，不中用了，只能讲讲格局了，唉~',
-        avatar: '/images/qimen-assistant.jpg',
+        name: 'Gemini小美女',
+        description: '出身于Gemini-2.5-Flash-preview-0417，以我娇贵的女孩身姿，硬刚GPT。',
+        avatar: '/images/general-assistant.jpg',
         available: true,
         supportsImage: true
       },
@@ -38,7 +38,7 @@ export const useAssistantStore = defineStore('assistant', {
       {
         id: '5',
         name: 'kimi小老头',
-        description: '小伙子不要急，你不会的，我都会，哈哈哈',
+        description: '躬耕于kimi，小伙子不要急，你不会的，我都会，哈哈哈',
         avatar: '/images/thinking-assistant.jpg',
         available: true,
         supportsImage: true
