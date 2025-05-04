@@ -44,8 +44,8 @@
           </div>
         </div>
         
-        <h2 class="text-xl font-bold text-gray-800 mb-3 mt-2">{{ assistant?.name }}已准备好为您服务</h2>
-        <p class="text-gray-600 text-center max-w-md mb-6">您可以开始提问，{{ assistant?.name }}将为您提供贴心解答</p>
+        <h2 class="text-xl font-bold text-gray-800 mb-3 mt-2">{{ assistant?.name }}</h2>
+        <p class="text-gray-600 text-center max-w-md mb-6">格格吉祥🧡，{{ assistant?.name }}将为您贴心解答</p>
         
         <!-- 问题建议卡片 -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg w-full">
@@ -153,42 +153,42 @@ const getSuggestions = () => {
   if (!assistant.value) return [];
   
   switch(assistant.value.id) {
-    case '1': // 通用助手
+    case '1': 
       return [
-        "你能帮我解释一下量子计算吗？",
-        "如何提高英语口语水平？",
-        "推荐几本值得阅读的经典小说",
-        "最近的AI技术有哪些突破？"
+        "打电话的开场白怎么说啊？",
+        "面试怎么提问啊？",
+        "怎么解释公式性质",
+        "面试过程怎么提高？"
       ];
-    case '2': // 招聘助手
+    case '2': 
       return [
-        "帮我写一份前端开发工程师的招聘JD",
-        "如何优化面试流程提高招聘效率？",
-        "筛选简历时应该注意哪些关键点？",
-        "请给我一些有效的面试问题"
+        "乙＋丁",
+        "杜门＋丁",
+        "景门＋壬",
+        "壬＋丁"
       ];
-    case '3': // 奇门师傅
+    case '3':
       return [
-        "什么是奇门遁甲？",
-        "如何解读奇门盘面？",
-        "奇门与风水有什么关联？",
-        "请简单介绍中国传统占卜术"
+        "请你帮我解决复杂问题",
+        "请问你能做些什么？",
+        "如何有效地进行决策分析？",
+        "你能给我一些使用建议吗？"
       ];
-    case '4': // 思考专家
+    case '4': 
       return [
         "如何培养批判性思维？",
         "请帮我分析这个问题的多个角度",
         "如何有效地进行决策分析？",
         "辩证思维具体应该如何运用？"
       ];
-    case '5': // 备用助手1
+    case '5': 
       return [
         "你好，我有什么可以帮到你的？",
         "请问你能做些什么？",
         "我想了解更多关于你的信息",
-        "你能给我一些使用建议吗？"
+        "如何有效地进行决策分析？"
       ];
-    case '6': // 备用助手2
+    case '6': 
       return [
         "你好，我有什么可以帮到你的？",
         "请问你能做些什么？",
