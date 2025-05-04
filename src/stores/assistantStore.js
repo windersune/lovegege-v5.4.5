@@ -29,8 +29,8 @@ export const useAssistantStore = defineStore('assistant', {
       },
       {
         id: '4',
-        name: '流浪小猪猪',
-        description: '目前在流浪，没有师父配置我，呜呜呜',
+        name: 'GPT小孩哥',
+        description: 'AI界的扛把子，GPT-4o出身，我只要嘴角一咧，万事可成！',
         avatar: '/images/beiyong.jpg',
         available: true,
         supportsImage: true
