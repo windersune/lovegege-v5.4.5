@@ -9,7 +9,7 @@ export const useAssistantStore = defineStore('assistant', {
         description: '你的面试，我来帮你搞定，相信我！',
         avatar: '/images/recruitment-assistant.jpg',  
         available: true,
-        supportsImage: true
+        supportsImage: false
       },
       {
         id: '2',
@@ -17,7 +17,7 @@ export const useAssistantStore = defineStore('assistant', {
         description: '老了，不中用了，只能讲讲格局了，唉~',
         avatar: '/images/qimen-assistant.jpg',
         available: true,
-        supportsImage: true
+        supportsImage: false
       },
       {
         id: '3',
@@ -41,7 +41,7 @@ export const useAssistantStore = defineStore('assistant', {
         description: '躬耕于kimi，小伙子急嘛，找我，，哈哈哈',
         avatar: '/images/thinking-assistant.jpg',
         available: true,
-        supportsImage: true
+        supportsImage: false
       },
       {
         id: '6',
@@ -49,7 +49,7 @@ export const useAssistantStore = defineStore('assistant', {
         description: '目前在流浪，没有师父配置我，呜呜呜',
         avatar: '/images/beiyong.jpg',
         available: true,
-        supportsImage: true
+        supportsImage: false
       }
     ]
   }),
