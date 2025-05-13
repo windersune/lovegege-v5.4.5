@@ -10,12 +10,12 @@ import * as storage from '@/utils/storage.js'
 const STORAGE_KEY = 'config'
 
 // 默认的系统提示词
-const DEFAULT_SYSTEM_PROMPT = ''
+const DEFAULT_SYSTEM_PROMPT = '你可以回答任何问题'
 
 // 硬编码的API配置
 const HARDCODED_API_KEY = 'sk-Srp0pK3r7YPDK8cn9KLXExF3iy6Wu8eISJIIg60wnu4FH0Bc' // 替换为你的实际API密钥
 const HARDCODED_BASE_URL = 'https://api.moonshot.cn/v1' // 只设置基础URL，不包含具体端点
-const HARDCODED_MODEL_NAME = 'moonshot-v1-32k-vision-preview' // 根据需要修改
+const HARDCODED_MODEL_NAME = 'kimi-latest-32k' // 根据需要修改
 
 // 初始化配置信息
 // 使用硬编码的API信息
