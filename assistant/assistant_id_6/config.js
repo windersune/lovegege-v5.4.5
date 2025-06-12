@@ -13,9 +13,9 @@ const STORAGE_KEY = 'config'
 const DEFAULT_SYSTEM_PROMPT = '你可以回答任何的问题。'
 
 // 硬编码的API配置
-const HARDCODED_API_KEY = 'sk-Srp0pK3r7YPDK8cn9KLXExF3iy6Wu8eISJIIg60wnu4FH0Bc' // 替换为你的实际API密钥
-const HARDCODED_BASE_URL = 'https://api.moonshot.cn/v1' // 只设置基础URL，不包含具体端点
-const HARDCODED_MODEL_NAME = 'moonshot-v1-8k' // 根据需要修改
+const HARDCODED_API_KEY = 'sk-ad7b096bbf254e40bfc724191867e874' // 替换为你的实际API密钥
+const HARDCODED_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1' // 只设置基础URL，不包含具体端点
+const HARDCODED_MODEL_NAME = 'qwen-max-latest' // 根据需要修改
 
 // 初始化配置信息
 // 使用硬编码的API信息
