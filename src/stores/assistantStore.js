@@ -17,7 +17,7 @@ export const useAssistantStore = defineStore('assistant', {
         description: '老了，不中用了，只能讲讲格局了，唉~',
         avatar: '/images/qimen-assistant.jpg',
         available: true,
-        supportsImage: false
+        supportsImage: true
       },
       {
         id: '3',
