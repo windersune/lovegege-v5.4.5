@@ -5,11 +5,11 @@ export const useAssistantStore = defineStore('assistant', {
     assistants: [
       {
         id: '1',
-        name: '招聘小柯',
-        description: '你的面试，我来帮你搞定，相信我！',
+        name: 'GPT小柯',
+        description: '我可是gpt哦！',
         avatar: '/images/recruitment-assistant.jpg',  
         available: true,
-        supportsImage: false
+        supportsImage: true
       },
       {
         id: '2',
