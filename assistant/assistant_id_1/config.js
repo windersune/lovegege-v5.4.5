@@ -1,51 +1,64 @@
 import * as storage from '@/utils/storage.js'
 
-// 配置信息有以下几个字段：
-// - apiKey: Coze API Key (已硬编码)
-// - baseURL: Coze API Base URL (已硬编码)
-// - botId: Coze智能体ID (已硬编码)
-// - userId: 用户唯一标识 (已硬编码)
-
 // 保存在 localStorage 中的配置信息的 key
 const STORAGE_KEY = 'config'
 
-// 硬编码的API配置
-const HARDCODED_BOT_ID = '7492784309083193380' // 替换为你的Coze智能体ID
-const HARDCODED_USER_ID = 'dawdaw456' // 替换为用户唯一标识，可以是任意字符串
-const HARDCODED_API_KEY = 'pat_ovJL6AVkQf7pUoThXzBGXoVcGH0V1EK5Qmlj3VFcgq5qA0zHZHCt2yc1UqPtqypI' // 替换为你的Coze API密钥
-const HARDCODED_BASE_URL = 'https://api.coze.cn/v3/chat' // 更新为Coze v3的API端点，与coze.py保持一致
+// ===================================================================
+//                        【核心修改】
+// ===================================================================
 
-// 初始化配置信息
-// 使用硬编码的API信息
-function initConfig() {
-	return {
-		apiKey: HARDCODED_API_KEY,
-		baseURL: HARDCODED_BASE_URL,
-		botId: HARDCODED_BOT_ID,
-		userId: HARDCODED_USER_ID
-	}
+// 1. 您的Cloudflare Worker代理的目标地址
+//    !!! 请确保这个地址是您自己的Worker地址 !!!
+const WORKER_CHATGPT_URL = 'https://cool-mountain-b541.zuoshilong888.workers.dev/openai/v1/chat/completions'
+
+// 2. 您想使用的ChatGPT模型
+const CHATGPT_MODEL_NAME = 'gpt-3.5-turbo' // 或 'gpt-4o'
+
+// 3. [新增] 为所有调试参数设置默认值
+const DEFAULT_CONFIG = {
+	systemPrompt: '你是一个由OpenAI训练的AI助手，请友好并有帮助地回答问题。',
+	temperature: 0.7,      // 温度：控制随机性，越高越随机 (0-2)
+	top_p: 1.0,            // Top P：控制核心词汇范围 (0-1)
+	max_tokens: 2048,      // 最大Token数：限制单次回复的长度
+	presence_penalty: 0.0, // 存在惩罚：-2.0到2.0，正值会鼓励模型谈论新话题
+	frequency_penalty: 0.0 // 频率惩罚：-2.0到2.0，正值会降低重复词语的概率
 }
 
-// 从 localStorage 中读取配置信息
-// 如果没有保存过配置信息，则初始化一个配置信息，并保存到 localStorage
+// ===================================================================
+
+// 加载配置信息
 export function loadConfig() {
-	// 始终使用硬编码配置
-	return initConfig();
+	// 从localStorage读取用户保存的配置
+	const savedConfig = storage.load(STORAGE_KEY) || {};
+	
+	return {
+		// 固定的基础信息
+		baseURL: WORKER_CHATGPT_URL,
+		modelName: CHATGPT_MODEL_NAME,
+		apiKey: '', 
+		
+		// [修改] 将默认配置与用户保存的配置合并
+		// 用户保存的值会覆盖默认值
+		...DEFAULT_CONFIG,
+		...savedConfig
+	}
 }
 
 // 保存配置信息到 localStorage
 export function saveConfig(config) {
-	// 合并硬编码配置和用户提供的配置
-	const newConfig = {
-		...initConfig(),
-		// 可以在这里添加其他用户配置项
+	// [修改] 创建一个只包含可调参数的对象进行保存
+	const configToSave = {
+		systemPrompt: config.systemPrompt,
+		temperature: config.temperature,
+		top_p: config.top_p,
+		max_tokens: config.max_tokens,
+		presence_penalty: config.presence_penalty,
+		frequency_penalty: config.frequency_penalty,
 	};
-	
-	storage.save(STORAGE_KEY, newConfig)
+	storage.save(STORAGE_KEY, configToSave)
 }
 
-// 判断是否已经保存了必填字段
+// 判断配置是否有效（总是返回true）
 export function hasValidConfig() {
-	// 由于使用硬编码值，总是返回true
-	return true;
+	return true
 }
