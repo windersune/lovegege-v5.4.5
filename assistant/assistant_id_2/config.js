@@ -11,7 +11,7 @@ const STORAGE_KEY = 'gemini_config';
 
 // 1. 您的Cloudflare Worker代理的Gemini专属地址
 //    !!! 请务必确认这个地址是您自己的，并且指向了支持视觉的模型 !!!
-const WORKER_GEMINI_URL = 'https://apilovegege.com/google/v1beta/models/gemini-2.5-flash:generateContent';
+const WORKER_GEMINI_URL = 'https://apilovegege.com/google/v1beta/models/gemini-1.5-flash:generateContent';
 
 // 2. [新增] Gemini所有可调参数的默认值
 //    参考文档: https://ai.google.dev/api/rest/v1beta/models/generateContent
