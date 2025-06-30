@@ -20,7 +20,7 @@ const DEFAULT_GEMINI_CONFIG = {
 	systemPrompt: '你是一个由Google训练的顶尖多模态AI模型Gemini。你的任务是分析用户提供的文本和图片，并给出详细、有帮助的回答。',
 	
 	// generationConfig 部分
-	temperature: 0.8,      // 温度：控制创造性，越高越有创意 (0-1)
+	temperature: 1.0,      // 温度：控制创造性，越高越有创意 (0-1)
 	topP: 0.95,            // Top P：控制核心词汇范围，一种更高级的随机性控制
 	topK: 40,              // Top K：在解码时考虑K个最可能的词元
 	maxOutputTokens: 8192, // 最大输出Token数：限制单次回复的长度
