@@ -295,6 +295,9 @@ const sendMessage = async (text, image) => {
       currentSSEConnection.abort();
       currentSSEConnection = null;
     }
+
+    // 【修改点 1】：将当前上传的 File 对象转换为 Base64 Data URL
+    const currentImageBase64 = image ? await fileToBase64(image) : null;
     
     // 添加用户消息到聊天记录
     chatStore.addMessage({
@@ -302,7 +305,7 @@ const sendMessage = async (text, image) => {
       content: text,
       sender: 'user',
       timestamp: new Date().toISOString(),
-      image: image ? URL.createObjectURL(image) : null
+      image: currentImageBase64     // <-- 现在 chatStore 直接存储 Base64 Data URL
     });
     
     // 设置加载状态
@@ -323,10 +326,13 @@ const sendMessage = async (text, image) => {
       .filter(msg => msg.sender === 'user' || (msg.sender === 'ai' && msg.content.trim() !== ''))
       .map(msg => ({
         role: msg.sender === 'user' ? 'user' : 'assistant',
-        content: msg.content
+        content: msg.content,
+        image: msg.image // <-- msg.image 现在预期已经是 Base64 Data URL
       }));
     
     console.log('发送消息 - 历史记录长度:', historyMessages.length);
+    console.log('发送消息 - 最终历史记录:', historyMessages); // 调试用
+
     
     // 发送消息到API
     currentSSEConnection = handleSSE(
@@ -334,7 +340,7 @@ const sendMessage = async (text, image) => {
       { 
         assistant_type: assistant.value.id, 
         message: text, 
-        image: image ? await fileToBase64(image) : null,
+        image: currentImageBase64, // <-- 使用处理好的当前图片 Base64
         history: historyMessages
       },
       (chunk) => {
