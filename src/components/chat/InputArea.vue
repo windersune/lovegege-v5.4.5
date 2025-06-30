@@ -1,4 +1,4 @@
-import { fileToBase64 } from '../utils/api'; // <-- 1. 添加这行导入
+
 
 <template>
   <div class="input-area">
@@ -133,31 +133,18 @@ const handleEnterKey = (e) => {
 };
 
 // 发送消息（--------------修改点----------------）
-const sendMessage = async () => { // <-- 声明为 async
+const sendMessage = () => {
   if (shouldDisableSend.value) {
     return;
   }
-
-  try {
-    // 如果有选中的图片文件，先将其转换为Base64
-    const imageBase64 = selectedImage.value 
-      ? await fileToBase64(selectedImage.value) 
-      : null;
-
-    // 发射已经处理好的文本和Base64字符串
-    emit('send', inputText.value, imageBase64);
-
-    // 清理工作
-    inputText.value = '';
-    removeImage();
-    nextTick(() => {
-      adjustTextareaHeight();
-    });
-  } catch (error) {
-    // 如果文件转换失败，在这里可以给用户提示
-    console.error("在 InputArea 中转换图片失败:", error);
-    alert("图片处理失败，请尝试其他图片。");
-  }
+  
+  emit('send', inputText.value, selectedImage.value); // <-- 问题点
+  inputText.value = '';
+  removeImage();
+  
+  nextTick(() => {
+    adjustTextareaHeight();
+  });
 };
 
 // 处理图片选择
