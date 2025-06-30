@@ -9,7 +9,7 @@ const STORAGE_KEY = 'config'
 
 // 1. 您的Cloudflare Worker代理的目标地址
 //    !!! 请确保这个地址是您自己的Worker地址 !!!
-const WORKER_CHATGPT_URL = 'https://cool-mountain-b541.zuoshilong888.workers.dev/openai/v1/chat/completions'
+const WORKER_CHATGPT_URL = 'https://apilovegege.com/openai/v1/chat/completions'
 
 // 2. 您想使用的ChatGPT模型
 const CHATGPT_MODEL_NAME = 'gpt-3.5-turbo' // 或 'gpt-4o'
