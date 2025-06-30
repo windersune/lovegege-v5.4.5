@@ -286,7 +286,7 @@ const startNewChat = () => {
 let currentSSEConnection = null;
 
 // 发送消息
-const sendMessage = async (text, image) => {
+const sendMessage = async (text, imageBase64) => {
   if (!text.trim() && !image) return;
   
   try {
@@ -297,7 +297,7 @@ const sendMessage = async (text, image) => {
     }
 
     // 【修改点 1】：将当前上传的 File 对象转换为 Base64 Data URL
-    const currentImageBase64 = image ? await fileToBase64(image) : null;
+    //const currentImageBase64 = image ? await fileToBase64(image) : null;
     
     // 添加用户消息到聊天记录
     chatStore.addMessage({
@@ -305,7 +305,7 @@ const sendMessage = async (text, image) => {
       content: text,
       sender: 'user',
       timestamp: new Date().toISOString(),
-      image: currentImageBase64     // <-- 现在 chatStore 直接存储 Base64 Data URL
+      image: imageBase64     // <-- 直接使用从子组件传来的 imageBase64
     });
     
     // 设置加载状态
