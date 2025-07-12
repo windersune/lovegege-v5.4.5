@@ -30,24 +30,24 @@ export const useAssistantStore = defineStore('assistant', {
       
       {
         id: '4',
-        name: '流浪小猪猪',
-        description: '目前在流浪，没有师父配置我，呜呜呜',
+        name: 'GPT小孩哥（wifi版）',
+        description: 'AI界的扛把子，GPT-4o出身，我只要嘴角一咧，万事可成！',
         avatar: '/images/beiyong.jpg',
         available: true,
         supportsImage: false
       },
       {
         id: '5',
-        name: '流浪小猪猪',
-        description: '目前在流浪，没有师父配置我，呜呜呜',
+        name: 'Gemini小美女（wifi版）',
+        description: '出身于Gemini2.5falsh，娇弱身姿硬刚GPT，反应稍慢，但不在话下。',
         avatar: '/images/beiyong.jpg',
         available: true,
         supportsImage: false
       },
       {
         id: '6',
-        name: '流浪小猪猪',
-        description: '目前在流浪，没有师父配置我，呜呜呜',
+        name: '老师傅',
+        description: '不要哭，往前走...',
         avatar: '/images/beiyong.jpg',
         available: true,
         supportsImage: false
