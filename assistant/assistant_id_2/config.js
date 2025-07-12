@@ -1,73 +1,205 @@
-// config.js
+// 直接复制dify.py中的核心逻辑到JavaScript
 
-import * as storage from '@/utils/storage.js';
+// --- 配置 ---
+const API_KEY = "app-uS1KADY2na616u3T4OIgJZaD"
+const API_BASE_URL = "https://api.dify.ai/v1"
+// 修改API端点为对话型应用接口
+const CHAT_ENDPOINT = `${API_BASE_URL}/chat-messages`
+const USER_ID = "my_test_user_002"
 
-// 为了防止和旧配置冲突，我们为Gemini使用一个新的localStorage key
-const STORAGE_KEY = 'gemini_config';
-
-// ===================================================================
-//                        【核心配置】
-// ===================================================================
-
-// 1. 您的Cloudflare Worker代理的Gemini专属地址
-//    !!! 请务必确认这个地址是您自己的，并且指向了支持视觉的模型 !!!
-//    这里使用 gemini-1.5-pro-latest 推荐，因为它功能强大且稳定。
-const WORKER_GEMINI_URL = 'https://apilovegege.com/google/v1beta/models/gemini-2.5-flash:generateContent';
-
-// 2. [新增] Gemini所有可调参数的默认值
-//    参考文档: https://ai.google.dev/api/rest/v1beta/models/generateContent
-const DEFAULT_GEMINI_CONFIG = {
-	// 注意: Gemini没有独立的system_prompt字段，我们会在message.js中进行处理
-	// 但这个字段仍然有用，可以作为用户自定义AI行为的入口
-	systemPrompt: '你是一个由Google训练的顶尖多模态AI模型Gemini。你的任务是分析用户提供的文本和图片，并给出详细、有帮助、富有洞察力的回答。',
+// 全局对话历史记录状态
+const CONVERSATION_HISTORY = {};
+// --- 配置结束 ---
 	
-	// generationConfig 部分
-	temperature: 0.8,      // 温度：控制创造性，越高越有创意 (0-1)
-	topP: 0.95,            // Top P：控制核心词汇范围，一种更高级的随机性控制
-	topK: 40,              // Top K：在解码时考虑K个最可能的词元 (通常与topP一起使用时效果更好)
-	maxOutputTokens: 8192, // 最大输出Token数：限制单次回复的长度
-	// stopSequences: [],   // 停止序列：可以让模型在生成特定文本时停止
-};
-
-// ===================================================================
-
-/**
- * 加载配置信息。
- * 它会合并默认配置和用户保存在本地的配置。
- */
+// 返回API配置信息
 export function loadConfig() {
-	const savedConfig = storage.load(STORAGE_KEY) || {};
-	
 	return {
-		// 固定的基础信息
-		baseURL: WORKER_GEMINI_URL, // 这个URL已经包含了模型名称和:generateContent动作
-		
-		// 将默认配置与用户保存的配置合并
-		// 用户自己设置的值会覆盖默认值
-		...DEFAULT_GEMINI_CONFIG,
-		...savedConfig,
-	};
+		apiKey: API_KEY,
+		baseURL: API_BASE_URL
+	}
 }
 
-/**
- * 保存配置信息到 localStorage。
- * 只保存用户可以调整的参数。
- * @param {object} config - 包含要保存参数的配置对象
- */
-export function saveConfig(config) {
-	const configToSave = {
-		systemPrompt: config.systemPrompt,
-		temperature: config.temperature,
-		topP: config.topP,
-		topK: config.topK,
-		maxOutputTokens: config.maxOutputTokens,
-	};
-	storage.save(STORAGE_KEY, configToSave);
-}
-
-/**
- * 判断配置是否有效（总是返回true，因为不再需要前端API Key）
- */
+// 兼容接口
 export function hasValidConfig() {
 	return true;
+}
+
+// 格式化对话历史为context
+export function formatContextForWorkflow(history, currentQuery) {
+	const formattedLines = [];
+	
+	// 添加历史记录
+	for (const message of history) {
+		const role = message.role === 'user' ? 'User' : 'Assistant';
+		formattedLines.push(`${role}: ${message.content}`);
+	}
+	
+	// 添加当前查询
+	formattedLines.push(`User: ${currentQuery}`);
+	
+	return formattedLines.join('\n');
+}
+
+// 主要的API调用函数
+export async function runDifyWorkflowStream(
+	query, 
+	conversationId = null, 
+	onDataCallback, 
+	onDoneCallback, 
+	onErrorCallback,
+	messageHistory = null
+) {
+	try {
+		console.log(`[DEBUG] 开始调用对话API，conversation_id=${conversationId}`);
+		
+		// 准备请求体 - 严格按照Dify对话型应用API格式
+		const payload = {
+			query: query,
+			response_mode: "streaming",
+			user: USER_ID,
+			inputs: {
+				text: query  // 添加必需的text字段
+			}
+		};
+		
+		// 如果有conversation_id，添加到请求中
+		if (conversationId) {
+			payload.conversation_id = conversationId;
+			console.log(`[DEBUG] 添加会话ID到请求: ${conversationId}`);
+		}
+		
+		console.log(`[DEBUG] 请求参数: `, JSON.stringify(payload));
+		
+		// 发送请求
+		const response = await fetch(CHAT_ENDPOINT, {
+			method: 'POST',
+			headers: {
+				'Authorization': `Bearer ${API_KEY}`,
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(payload)
+		});
+		
+		// 处理错误
+		if (response.status !== 200) {
+			const errorText = await response.text();
+			console.error(`[ERROR] 请求失败: ${response.status}`);
+			console.error(`[ERROR] 响应内容: ${errorText}`);
+			throw new Error(`对话API调用失败: ${response.statusText}`);
+		}
+		
+		// 处理流式响应
+		const reader = response.body.getReader();
+		const decoder = new TextDecoder();
+		let buffer = '';
+		let fullResponse = '';
+		let newConversationId = null;
+		
+		// 逐块处理响应流
+		while (true) {
+			const { value, done } = await reader.read();
+			
+			if (done) {
+				if (onDoneCallback) {
+					onDoneCallback();
+				}
+				break;
+			}
+			
+			buffer += decoder.decode(value, { stream: true });
+			
+			// 按行处理数据，Dify的SSE响应格式是data: {...}\n\n
+			let lineEndIndex;
+			while ((lineEndIndex = buffer.indexOf('\n\n')) !== -1) {
+				const line = buffer.substring(0, lineEndIndex);
+				buffer = buffer.substring(lineEndIndex + 2);
+				
+				// 处理数据行，它应该以 "data:" 开头
+				if (line.startsWith('data:')) {
+					const jsonStr = line.substring(5).trim();
+					if (jsonStr) {
+						try {
+							const data = JSON.parse(jsonStr);
+							
+							// 提取conversation_id
+							if (data.conversation_id && !newConversationId) {
+								newConversationId = data.conversation_id;
+								console.log(`[DEBUG] 从响应中获取会话ID: ${newConversationId}`);
+							}
+							
+							// 提取回答内容
+							let content = '';
+							
+							// 根据事件类型提取数据
+							if (data.event === 'message') {
+								// 消息事件，包含answer字段
+								if (data.answer) {
+									content = data.answer;
+								}
+								
+								if (content) {
+									console.log(`[DEBUG] 接收消息块: ${content}`);
+									fullResponse += content;
+									if (onDataCallback) {
+										onDataCallback(data, content);
+									}
+								}
+							} else if (data.event === 'message_end') {
+								// 消息结束事件，可以获取元数据
+								console.log(`[DEBUG] 消息结束`);
+								if (data.metadata) {
+									console.log(`[DEBUG] 使用元数据: `, JSON.stringify(data.metadata));
+								}
+							} else if (data.event === 'error') {
+								// 错误事件
+								const errorMsg = data.message || '未知流式错误';
+								console.error(`[ERROR] 流错误: ${errorMsg}`);
+								if (onErrorCallback) {
+									onErrorCallback(new Error(errorMsg));
+								}
+							}
+						} catch (e) {
+							console.warn(`[WARN] JSON解析错误: ${e.message}, 原始数据: ${jsonStr}`);
+						}
+					}
+				}
+			}
+		}
+		
+		// 确定最终的会话ID
+		const finalConversationId = newConversationId || conversationId;
+		console.log(`[DEBUG] 最终会话ID: ${finalConversationId}`);
+		
+		// 更新对话历史
+		if (finalConversationId && fullResponse) {
+			if (!CONVERSATION_HISTORY[finalConversationId]) {
+				CONVERSATION_HISTORY[finalConversationId] = [];
+			}
+			
+			// 添加用户消息
+			CONVERSATION_HISTORY[finalConversationId].push({
+				role: 'user',
+				content: query
+			});
+			
+			// 添加助手消息
+			CONVERSATION_HISTORY[finalConversationId].push({
+				role: 'assistant',
+				content: fullResponse
+			});
+			
+			console.log(`[DEBUG] 更新历史记录，当前长度: ${CONVERSATION_HISTORY[finalConversationId].length}`);
+		}
+		
+		return {
+			conversationId: finalConversationId,
+			response: fullResponse
+		};
+	} catch (error) {
+		console.error(`[ERROR] 对话API调用异常: ${error.message}`);
+		if (onErrorCallback) {
+			onErrorCallback(error);
+		}
+		throw error;
+	}
 }
