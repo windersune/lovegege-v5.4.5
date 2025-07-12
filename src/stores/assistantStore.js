@@ -5,19 +5,19 @@ export const useAssistantStore = defineStore('assistant', {
     assistants: [
       {
         id: '1',
-        name: 'GPT小孩哥',
-        description: 'AI界的扛把子，GPT-4o出身，我只要嘴角一咧，万事可成！',
-        avatar: '/images/4.jpg',
+        name: 'GPT阿布',
+        description: 'AI界的海盗王，GPT出身，我一出马，万事可成！',
+        avatar: '/images/7.12-1.jpg',
         available: true,
-        supportsImage: true
+        supportsImage: false
       },
       {
         id: '2',
-        name: 'Gemini小美女',
-        description: '出身于Gemini2.5falsh，娇弱身姿硬刚GPT，反应稍慢，但不在话下。',
-        avatar: '/images/general-assistant.jpg',
+        name: 'Gemini女皇',
+        description: '出身于Gemini2.5falsh，娇弱身姿压制GPT阿布，反应稍慢。',
+        avatar: '/images/7.12-2.jpg',
         available: true,
-        supportsImage: true
+        supportsImage: false
       },
       {
         id: '3',
@@ -31,24 +31,24 @@ export const useAssistantStore = defineStore('assistant', {
       {
         id: '4',
         name: 'GPT小孩哥（wifi版）',
-        description: 'AI界的扛把子，GPT-4o出身，我只要嘴角一咧，万事可成！',
-        avatar: '/images/beiyong.jpg',
+        description: '我只能在公共网络/wifi情况下使用，移动网络不行哦',
+        avatar: '/images/7.12-4.jpg',
         available: true,
         supportsImage: false
       },
       {
         id: '5',
-        name: 'Gemini小美女（wifi版）',
-        description: '出身于Gemini2.5falsh，娇弱身姿硬刚GPT，反应稍慢，但不在话下。',
-        avatar: '/images/beiyong.jpg',
+        name: 'Gemini大美女（wifi版）',
+        description: '我只能在公共网络/wifi情况下使用，移动网络不行哦',
+        avatar: '/images/7.12-5.jpg',
         available: true,
         supportsImage: false
       },
       {
         id: '6',
         name: '老师傅',
-        description: '不要哭，往前走...',
-        avatar: '/images/beiyong.jpg',
+        description: '继往圣之绝，开万世之太平。',
+        avatar: '/images/7.12-6.jpg',
         available: true,
         supportsImage: false
       }
