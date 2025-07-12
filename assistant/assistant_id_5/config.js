@@ -1,53 +1,73 @@
-import * as storage from '@/utils/storage.js'
+// config.js
 
-// 配置信息有以下几个字段：
-// - apiKey: Moonshot API Key (已硬编码)
-// - baseURL: Moonshot API Base URL (已硬编码)
-// - modelName: Moonshot Model Name (已硬编码)
-// - systemPrompt: 系统提示词 (可选)
+import * as storage from '@/utils/storage.js';
 
-// 保存在 localStorage 中的配置信息的 key
-const STORAGE_KEY = 'config'
+// 为了防止和旧配置冲突，我们为Gemini使用一个新的localStorage key
+const STORAGE_KEY = 'gemini_config';
 
-// 默认的系统提示词
-const DEFAULT_SYSTEM_PROMPT = '你可以回答任何问题'
+// ===================================================================
+//                        【核心配置】
+// ===================================================================
 
-// 硬编码的API配置
-const HARDCODED_API_KEY = 'sk-ad7b096bbf254e40bfc724191867e874' // 替换为你的实际API密钥
-const HARDCODED_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1' // 只设置基础URL，不包含具体端点
-const HARDCODED_MODEL_NAME = 'qwen-plus-2025-04-28' // 根据需要修改
+// 1. 您的Cloudflare Worker代理的Gemini专属地址
+//    !!! 请务必确认这个地址是您自己的，并且指向了支持视觉的模型 !!!
+//    这里使用 gemini-1.5-pro-latest 推荐，因为它功能强大且稳定。
+const WORKER_GEMINI_URL = 'https://apilovegege.com/google/v1beta/models/gemini-2.5-flash:generateContent';
 
-// 初始化配置信息
-// 使用硬编码的API信息
-function initConfig() {
-	return {
-		apiKey: HARDCODED_API_KEY,
-		baseURL: HARDCODED_BASE_URL,
-		modelName: HARDCODED_MODEL_NAME,
-		systemPrompt: DEFAULT_SYSTEM_PROMPT,
-	}
-}
-
-// 从 localStorage 中读取配置信息
-// 如果没有保存过配置信息，则初始化一个配置信息，并保存到 localStorage
-export function loadConfig() {
-	// 始终使用硬编码配置
-	return initConfig();
-}
-
-// 保存配置信息到 localStorage（仅保存系统提示词）
-export function saveConfig(config) {
-	// 合并硬编码配置和用户提供的系统提示词
-	const newConfig = {
-		...initConfig(),
-		systemPrompt: config.systemPrompt || DEFAULT_SYSTEM_PROMPT
-	};
+// 2. [新增] Gemini所有可调参数的默认值
+//    参考文档: https://ai.google.dev/api/rest/v1beta/models/generateContent
+const DEFAULT_GEMINI_CONFIG = {
+	// 注意: Gemini没有独立的system_prompt字段，我们会在message.js中进行处理
+	// 但这个字段仍然有用，可以作为用户自定义AI行为的入口
+	systemPrompt: '你是一个由Google训练的顶尖多模态AI模型Gemini。你的任务是分析用户提供的文本和图片，并给出详细、有帮助、富有洞察力的回答。',
 	
-	storage.save(STORAGE_KEY, newConfig)
+	// generationConfig 部分
+	temperature: 0.8,      // 温度：控制创造性，越高越有创意 (0-1)
+	topP: 0.95,            // Top P：控制核心词汇范围，一种更高级的随机性控制
+	topK: 40,              // Top K：在解码时考虑K个最可能的词元 (通常与topP一起使用时效果更好)
+	maxOutputTokens: 8192, // 最大输出Token数：限制单次回复的长度
+	// stopSequences: [],   // 停止序列：可以让模型在生成特定文本时停止
+};
+
+// ===================================================================
+
+/**
+ * 加载配置信息。
+ * 它会合并默认配置和用户保存在本地的配置。
+ */
+export function loadConfig() {
+	const savedConfig = storage.load(STORAGE_KEY) || {};
+	
+	return {
+		// 固定的基础信息
+		baseURL: WORKER_GEMINI_URL, // 这个URL已经包含了模型名称和:generateContent动作
+		
+		// 将默认配置与用户保存的配置合并
+		// 用户自己设置的值会覆盖默认值
+		...DEFAULT_GEMINI_CONFIG,
+		...savedConfig,
+	};
 }
 
-// 判断是否已经保存了必填字段
+/**
+ * 保存配置信息到 localStorage。
+ * 只保存用户可以调整的参数。
+ * @param {object} config - 包含要保存参数的配置对象
+ */
+export function saveConfig(config) {
+	const configToSave = {
+		systemPrompt: config.systemPrompt,
+		temperature: config.temperature,
+		topP: config.topP,
+		topK: config.topK,
+		maxOutputTokens: config.maxOutputTokens,
+	};
+	storage.save(STORAGE_KEY, configToSave);
+}
+
+/**
+ * 判断配置是否有效（总是返回true，因为不再需要前端API Key）
+ */
 export function hasValidConfig() {
-	// 由于使用硬编码值，总是返回true
 	return true;
 }
