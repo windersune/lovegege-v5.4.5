@@ -32,32 +32,48 @@ async function* createStreamReader(reader) {
 	}
 }
 
+// message.js (最终的、正确的解决方案)
 export async function getResponse(messages) {
 	// 加载包含所有参数的完整配置
-	const config = loadConfig()
-
-	// 历史消息记录管理部分保持原样 ...
-	if (messages.length > 0) {
-		messages = messages.slice(0, -1)
-	}
-	if (messages.length > 11) {
-		messages = messages.slice(-11)
-	}
+	const config = loadConfig();
 
 	// ===================================================================
 	//                        【核心修改】
 	// ===================================================================
-	// 构建包含所有调试参数的请求体
+
+	// 1. 检查整个消息历史中是否包含任何图片
+	const containsImage = messages.some(msg => 
+		Array.isArray(msg.content) && msg.content.some(part => part.type === 'image_url')
+	);
+
+	// 2. 如果包含图片，则确保所有用户消息都是数组格式
+	let processedMessages = messages;
+	if (containsImage) {
+		processedMessages = messages.map(msg => {
+			// 只处理 role 为 'user' 且 content 是字符串的消息
+			if (msg.role === 'user' && typeof msg.content === 'string') {
+				// 将其转换为多模态数组格式
+				return {
+					...msg,
+					content: [{ type: 'text', text: msg.content }]
+				};
+			}
+			// 其他消息（助手消息或已经是数组的用户消息）保持原样
+			return msg;
+		});
+	}
+
+	// 构建请求体
 	const requestBody = {
+		// 使用我们处理过的 processedMessages
 		messages: [
 			{ role: 'system', content: config.systemPrompt },
-			...messages,
+			...processedMessages,
+
 		],
 		model: config.modelName,
 		stream: true,
 		
-		// [新增] 从config对象中读取所有调试参数
-		// 使用Number()和parseInt()确保类型正确，防止从localStorage读取时变成字符串
 		temperature: Number(config.temperature),
 		top_p: Number(config.top_p),
 		max_tokens: parseInt(config.max_tokens, 10),
@@ -65,7 +81,7 @@ export async function getResponse(messages) {
 		frequency_penalty: Number(config.frequency_penalty),
 	};
 
-	// fetch调用部分保持原样，它现在会发送包含所有参数的requestBody
+	// ... fetch 和后续代码保持不变 ...
 	const response = await fetch(config.baseURL, {
 		method: 'POST',
 		headers: {
@@ -79,7 +95,6 @@ export async function getResponse(messages) {
 		throw new Error(`API请求失败: ${response.status} ${errorData}`);
 	}
 
-	// 流式响应处理部分保持原样
 	const reader = response.body.getReader();
 	return createStreamReader(reader);
 }
