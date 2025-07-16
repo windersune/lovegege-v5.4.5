@@ -148,7 +148,7 @@ const messages = computed(() => chatStore.messages);
 const loading = computed(() => chatStore.loading);
 const error = computed(() => chatStore.error);
 
-// 为不同助手提供的问题建议 - 减少计算量，使用普通变量而非计算属性
+// 为不同助手提供的问题建议
 const getSuggestions = () => {
   if (!assistant.value) return [];
   
@@ -220,7 +220,7 @@ const usePromptSuggestion = (suggestion) => {
   sendMessage(suggestion);
 };
 
-// 监听消息变化，自动滚动到底部 - 使用RAF优化滚动性能
+// 监听消息变化，自动滚动到底部
 watch(messages, () => {
   nextTick(() => {
     requestAnimationFrame(() => {
@@ -231,14 +231,12 @@ watch(messages, () => {
   });
 }, { deep: true });
 
-// 组件挂载时清空消息 - 优化初始化逻辑
+// 组件挂载时清空消息
 onMounted(() => {
-  // 设置初始状态
   requestAnimationFrame(() => {
     chatStore.clearMessages();
     chatStore.setError(null);
     
-    // 如果助手不存在或不可用，返回主页
     if (!assistant.value || !assistant.value.available) {
       router.push('/');
     }
@@ -247,37 +245,30 @@ onMounted(() => {
 
 // 返回主页
 const goBack = () => {
-  // 如果存在当前SSE连接，先取消它
   if (currentSSEConnection) {
     currentSSEConnection.abort();
     currentSSEConnection = null;
   }
   
-  // 清空消息和错误状态
   chatStore.clearMessages();
   chatStore.setError(null);
   chatStore.setLoading(false);
   
-  // 返回主页
   router.push('/');
 };
 
 // 开始新对话
 const startNewChat = () => {
-  // 如果存在当前SSE连接，先取消它
   if (currentSSEConnection) {
     currentSSEConnection.abort();
     currentSSEConnection = null;
   }
   
-  // 清空消息和错误状态
   chatStore.clearMessages();
   chatStore.setError(null);
   chatStore.setLoading(false);
   
-  // 显示新会话的欢迎信息或提示
   nextTick(() => {
-    // 可以在这里添加一些视觉反馈，表明是新会话
     console.log('开始新对话 - 历史记录已清除');
   });
 };
@@ -285,19 +276,42 @@ const startNewChat = () => {
 // 定义取消当前SSE连接的函数
 let currentSSEConnection = null;
 
+
+// =========================================================================
+// ========================== START: MODIFIED CODE =========================
+// =========================================================================
+
 // 发送消息
 const sendMessage = async (text, image) => {
   if (!text.trim() && !image) return;
   
   try {
-    // 如果存在当前SSE连接，先取消它
     if (currentSSEConnection) {
       currentSSEConnection.abort();
       currentSSEConnection = null;
     }
 
-    // 【修改点 1】：将当前上传的 File 对象转换为 Base64 Data URL
-    const currentImageBase64 = image ? await fileToBase64(image) : null;
+    // 【关键修改点 1】：智能处理图片数据
+    // 检查 image 参数，如果已经是 base64 字符串 (来自重试) 则直接使用，否则进行转换 (来自新上传)
+    let currentImageBase64 = null;
+    if (image) {
+      if (typeof image === 'string' && image.startsWith('data:image')) {
+        // 当 'image' 是 base64 字符串时直接赋值
+        currentImageBase64 = image;
+      } else if (image instanceof Blob) {
+        // 当 'image' 是 File 或 Blob 对象时，调用转换函数
+        currentImageBase64 = await fileToBase64(image);
+      } else {
+        console.error('无效的图片数据类型:', image);
+        // 可以选择在这里设置一个错误状态并返回
+        chatStore.setError('提供了无效的图片格式。');
+        return;
+      }
+    }
+
+    // 注意：当前重试逻辑会在消息列表中创建一条重复的用户消息。
+    // 更完善的实现方式是在 chatStore 中添加一个方法来替换最后一条失败的消息，而不是简单地添加。
+    // 为保持最小改动，此处暂时保留该行为。
     
     // 添加用户消息到聊天记录
     chatStore.addMessage({
@@ -305,10 +319,9 @@ const sendMessage = async (text, image) => {
       content: text,
       sender: 'user',
       timestamp: new Date().toISOString(),
-      image: currentImageBase64     // <-- 直接使用从子组件传来的 imageBase64
+      image: currentImageBase64 // <-- 使用已经处理好的 base64 数据
     });
     
-    // 设置加载状态
     chatStore.setLoading(true);
     chatStore.setError(null);
     
@@ -327,12 +340,10 @@ const sendMessage = async (text, image) => {
       .map(msg => ({
         role: msg.sender === 'user' ? 'user' : 'assistant',
         content: msg.content,
-        image: msg.image // <-- msg.image 现在预期已经是 Base64 Data URL
+        image: msg.image
       }));
     
-    console.log('发送消息 - 历史记录长度:', historyMessages.length);
-    console.log('发送消息 - 最终历史记录:', historyMessages); // 调试用
-
+    console.log('发送消息 - 最终历史记录:', historyMessages);
     
     // 发送消息到API
     currentSSEConnection = handleSSE(
@@ -340,11 +351,10 @@ const sendMessage = async (text, image) => {
       { 
         assistant_type: assistant.value.id, 
         message: text, 
-        image: currentImageBase64, // <-- 使用处理好的当前图片 Base64
+        image: currentImageBase64, // <-- 使用已经处理好的 base64 数据
         history: historyMessages
       },
       (chunk) => {
-        // 如果是重连消息，添加到现有消息后面，但使用特殊样式标记
         if (typeof chunk === 'string' && chunk.includes('[正在重新连接...')) {
           chatStore.updateLastAiMessage((prev) => 
             prev + `<span class="text-yellow-500 text-xs">${chunk}</span><br/>`
@@ -354,12 +364,10 @@ const sendMessage = async (text, image) => {
         }
       },
       () => {
-        // 完成
         chatStore.setLoading(false);
         currentSSEConnection = null;
       },
       (error) => {
-        // 错误处理
         console.error('SSE错误:', error);
         chatStore.setError('很抱歉，服务暂时遇到问题，请稍后再试~');
         chatStore.setLoading(false);
@@ -382,17 +390,21 @@ const retryLastMessage = () => {
     .find(message => message.sender === 'user');
   
   if (lastUserMessage) {
-    // 清除错误状态
     chatStore.setError(null);
     
-    // 重新发送消息
-    sendMessage(lastUserMessage.content, null);
+    // 【关键修改点 2】: 确保在重试时传递图片数据 (之前是 null)
+    // `lastUserMessage.image` 此时是 base64 字符串，`sendMessage` 函数已被修改以处理这种情况。
+    sendMessage(lastUserMessage.content, lastUserMessage.image);
   }
 };
 
+// =======================================================================
+// ========================== END: MODIFIED CODE =========================
+// =======================================================================
+
+
 // 组件卸载时清理资源
 onBeforeUnmount(() => {
-  // 取消可能存在的SSE连接
   if (currentSSEConnection) {
     currentSSEConnection.abort();
     currentSSEConnection = null;
