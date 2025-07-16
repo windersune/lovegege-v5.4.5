@@ -123,7 +123,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, onBeforeMou
 import { useRoute, useRouter } from 'vue-router';
 import { useAssistantStore } from '../stores/assistantStore';
 import { useChatStore } from '../stores/chatStore';
-import { fileToBase64 } from '../utils/api'; // apiSendMessage is not directly used here
+import { fileToBase64 } from '../utils/api'; // apiSendMessage from original is not used
 import { handleSSE } from '../utils/sse';
 
 import ChatHeader from '../components/chat/ChatHeader.vue';
@@ -166,7 +166,7 @@ onBeforeMount(() => {
 });
 
 const usePromptSuggestion = (suggestion) => {
-  sendMessage(suggestion, null);
+  sendMessage(suggestion, null); // Pass null for image
 };
 
 watch(messages, () => {
@@ -232,7 +232,8 @@ const sendMessage = async (text, image, isRetry = false) => {
       }));
 
     // 2. 【图片处理修复】: 只在这里处理图片转换，并能兼容 File 和 base64 string
-    const currentImageBase64 = image instanceof Blob ? await fileToBase64(image) : image;
+    //    由于您已修复 api.js, fileToBase64现在是健壮的
+    const currentImageBase64 = await fileToBase64(image);
     
     // 3. 【UI更新】: 在准备好所有数据后，再更新UI。如果不是重试，才添加新消息。
     if (!isRetry) {
@@ -261,7 +262,7 @@ const sendMessage = async (text, image, isRetry = false) => {
       { 
         assistant_type: assistant.value.id, 
         message: messageText, 
-        image: currentImageBase64,
+        image: currentImageBase64, // 传递已转换好的base64
         history: historyForApi // 传递干净的历史记录
       },
       (chunk) => {
