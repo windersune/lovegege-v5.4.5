@@ -213,7 +213,6 @@ const startNewChat = () => {
  * @param {boolean} isRetry - 标记这是否是一次重试操作
  */
 const sendMessage = async (text, image, isRetry = false) => {
-  // 允许只发送图片，但文本必须是字符串
   const messageText = text || '';
   if (!messageText.trim() && !image) return;
 
@@ -222,50 +221,48 @@ const sendMessage = async (text, image, isRetry = false) => {
       currentSSEConnection.abort();
     }
     
-    // 1. 【顺序修正】: 先根据当前状态构建历史记录
+    // 1. 【逻辑顺序修复】: 先基于当前干净的 store 状态构建历史记录
     const historyEndIndex = isRetry ? -1 : messages.value.length;
     const historyForApi = messages.value
       .slice(0, historyEndIndex)
-      .map(msg => ({
-        role: msg.sender === 'user' ? 'user' : 'assistant',
-        content: msg.content,
-        image: msg.image || null
+      .map(msg => ({ 
+        role: msg.sender === 'user' ? 'user' : 'assistant', 
+        content: msg.content, 
+        image: msg.image || null 
       }));
 
-    // 2. 【唯一转换点】: 只在这里将File对象转为Base64
-    //    如果 image 是 File/Blob，转换它；如果是 base64 字符串或 null，直接使用。
+    // 2. 【图片处理修复】: 只在这里处理图片转换，并能兼容 File 和 base64 string
     const currentImageBase64 = image instanceof Blob ? await fileToBase64(image) : image;
     
-    // 3. 【UI更新】: 如果不是重试，才将新消息添加到UI
+    // 3. 【UI更新】: 在准备好所有数据后，再更新UI。如果不是重试，才添加新消息。
     if (!isRetry) {
-      chatStore.addMessage({
-        id: Date.now(),
-        content: messageText,
-        sender: 'user',
-        timestamp: new Date().toISOString(),
-        image: currentImageBase64
+      chatStore.addMessage({ 
+        id: Date.now(), 
+        content: messageText, 
+        sender: 'user', 
+        timestamp: new Date().toISOString(), 
+        image: currentImageBase64 
       });
     }
 
+    // 4. 设置加载状态并添加AI消息占位符
     chatStore.setLoading(true);
     chatStore.setError(null);
-
-    // 4. 添加AI消息占位符
-    chatStore.addMessage({
-      id: Date.now() + 1,
-      content: '',
-      sender: 'ai',
-      timestamp: new Date().toISOString()
+    chatStore.addMessage({ 
+      id: Date.now() + 1, 
+      content: '', 
+      sender: 'ai', 
+      timestamp: new Date().toISOString() 
     });
 
-    // 5. 调用SSE处理
+    // 5. 【调用SSE】: 使用干净的历史记录和处理好的图片数据
     currentSSEConnection = handleSSE(
       '/api/chat',
       { 
         assistant_type: assistant.value.id, 
         message: messageText, 
-        image: currentImageBase64, // 这里传递的是转换好的base64或null
-        history: historyForApi
+        image: currentImageBase64,
+        history: historyForApi // 传递干净的历史记录
       },
       (chunk) => {
         if (typeof chunk === 'string' && chunk.includes('[正在重新连接...')) {
@@ -298,7 +295,7 @@ const sendMessage = async (text, image, isRetry = false) => {
  */
 const retryLastMessage = () => {
   // 从UI上移除失败的AI消息占位符
-  if (messages.value.length > 0 && messages.value[messages.value.length - 1].sender === 'ai') {
+  if (messages.value.length > 0 && messages.value.at(-1)?.sender === 'ai') {
     chatStore.removeLastMessage();
   }
   chatStore.setError(null);
