@@ -12,7 +12,7 @@ const STORAGE_KEY = 'config'
 const WORKER_CHATGPT_URL = 'https://apilovegege.com/openai/v1/chat/completions'
 
 // 2. 您想使用的ChatGPT模型
-const CHATGPT_MODEL_NAME = 'gpt-4o' // 或 'gpt-4o'
+const CHATGPT_MODEL_NAME = 'o4-mini' // 或 'gpt-4o'
 
 // 3. [新增] 为所有调试参数设置默认值
 const DEFAULT_CONFIG = {
