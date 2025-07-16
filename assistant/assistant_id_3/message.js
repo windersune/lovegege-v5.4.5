@@ -1,29 +1,21 @@
+// message.js - 带终极调试日志
 import { loadConfig, hasValidConfig } from './config.js'
 
-/**
- * 【最终诊断版】
- * 我们将直接打印从服务器接收到的每一个原始数据块。
- */
 async function* createStreamReader(reader) {
 	const decoder = new TextDecoder();
 	let buffer = '';
-	
-	// ================== 新增的原始数据日志 ==================
-	console.log('[DEBUG] createStreamReader: Starting to read from stream...');
+    console.log('[DEBUG] createStreamReader: Starting to read from stream...');
 	
 	while (true) {
 		const { value, done } = await reader.read();
-		
 		if (done) {
-			console.log('[DEBUG] createStreamReader: Stream has finished.');
+            console.log('[DEBUG] createStreamReader: Stream has finished.');
 			break;
-		}
-		
-        // 直接打印解码后的原始数据块
-		const rawChunk = decoder.decode(value, { stream: true });
-		console.log('[RAW STREAM DEBUG] Received Data Chunk:', rawChunk);
-        // ==========================================================
+        }
 
+        const rawChunk = decoder.decode(value, { stream: true });
+		console.log('[RAW STREAM DEBUG] Received Data Chunk:', rawChunk);
+		
 		buffer += rawChunk;
 		const lines = buffer.split('\n');
 		buffer = lines.pop() || '';
@@ -33,26 +25,19 @@ async function* createStreamReader(reader) {
 				try {
 					const json = JSON.parse(line.trim().slice(6));
                     
-					if (json.event === 'message' && json.message && json.message.content) {
-						const formattedJson = {
-							choices: [{ delta: { content: json.message.content } }]
-						};
+					if (json.event === 'message' && json.message && json.message.type === 'answer' && typeof json.message.content === 'string') {
+						const formattedJson = { choices: [{ delta: { content: json.message.content } }] };
 						yield formattedJson;
 					} else if (json.event === 'error') {
-                        console.error('[DEBUG] Coze API Stream Error Event:', json);
+                        console.error('Coze API Stream Error Event:', json);
                         throw new Error(`Coze API Error: ${json.error.message}`);
                     }
-
-				} catch (e) {
-					console.error('[DEBUG] 解析或转换SSE数据出错:', e);
-				}
+				} catch (e) {}
 			}
 		}
 	}
 }
 
-
-// getResponse 函数保持不变，因为它已经是正确的
 export async function getResponse(messages) {
     console.log('[DEBUG] --- getResponse function started ---');
     try {
@@ -64,15 +49,15 @@ export async function getResponse(messages) {
         }
         console.log('[DEBUG] Config is valid.');
         const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
-        if (!lastUserMessage) {
-            throw new Error('没有找到用户消息。');
-        }
+        if (!lastUserMessage) { throw new Error('没有找到用户消息。'); }
         const chatHistory = messages.slice(0, messages.length - 1).filter(msg => (msg.role === 'user' || msg.role === 'assistant') && msg.content).map(msg => ({ role: msg.role, content: typeof msg.content === 'string' ? msg.content : (msg.content[0]?.text || ''), }));
         const requestBody = { bot_id: config.bot_id, user: config.user_id, query: typeof lastUserMessage.content === 'string' ? lastUserMessage.content : (lastUserMessage.content[0]?.text || ''), chat_history: chatHistory, stream: true, };
         console.log('[DEBUG] Preparing to send request with body:', JSON.stringify(requestBody, null, 2));
+        
         console.log('[DEBUG] Sending fetch request to:', config.baseURL);
         const response = await fetch(config.baseURL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.token}`, }, body: JSON.stringify(requestBody), });
         console.log('[DEBUG] Received fetch response header.');
+
         if (!response.ok) {
             const errorText = await response.text();
             console.error(`[DEBUG] API请求失败: ${response.status}`, errorText);
