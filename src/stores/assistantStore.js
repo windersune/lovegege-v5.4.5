@@ -40,7 +40,7 @@ export const useAssistantStore = defineStore('assistant', {
         id: '5',
         name: 'Gemini大美女（wifi版）',
         description: '我只能在公共网络/wifi情况下使用，移动网络不行哦',
-        avatar: '/images/7.12-5.jpg',
+        avatar: '/images/backup-assistant.png',
         available: false,
         supportsImage: false
       },
