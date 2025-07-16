@@ -1,32 +1,26 @@
 import { loadConfig } from './config.js';
 
 /**
- * 【最终修正版】
- *  - 增加了对传入 messages 数组的预处理，使其能应对UI框架在第一次调用时传入的格式错误的数据。
- *  - 保留了您编写的、完全正确的Coze API v3的调用和流式解析逻辑。
+ * 【最终确认版】
+ *  - 融合了数组预处理的健壮性（我的建议）和流式数据解析的正确性（您的实现）。
+ *  - 这应该能确保在所有情况下（包括首次对话）都能稳定地工作。
  */
 export async function getResponse(messages) {
 	const config = loadConfig();
 
-	// ===================== 【核心修正：数组预处理】 =====================
-	// 在执行任何操作前，先过滤掉所有无效的消息记录。
-	// 这可以防止UI框架在会话开始时传入的、格式错误的占位消息（如 undefined 或缺少 content 属性）导致程序崩溃。
+	// ===================== 第一部分：健壮的消息预处理（来自我的建议） =====================
+	// 在执行任何操作前，先过滤掉所有无效的消息记录，防止UI框架在会话开始时传入错误数据。
 	const cleanedMessages = messages.filter(msg => msg && msg.content !== undefined && msg.content !== null);
-	// =================================================================
-
-	// 如果清洗后没有消息了，说明输入有问题，直接返回。
+	
 	if (cleanedMessages.length === 0) {
-		console.error("接收到的消息数组为空或无效。");
-		// 返回一个空的流，避免UI卡死
-		return {
-			[Symbol.asyncIterator]: async function* () {}
-		};
+		console.error("接收到的消息数组在清洗后为空，已中止。");
+		return { [Symbol.asyncIterator]: async function* () {} };
 	}
+	// ===================================================================================
 
-	// 后续所有操作都使用清洗过的 `cleanedMessages`
 	const latestUserMessage = cleanedMessages[cleanedMessages.length - 1].content;
 	console.log("最新用户消息:", latestUserMessage);
-
+	
 	const additionalMessages = cleanedMessages.map(msg => ({
 		role: msg.role === 'user' ? 'user' : 'assistant',
 		content: msg.content,
@@ -55,7 +49,7 @@ export async function getResponse(messages) {
 		};
 
 		const response = await fetch(config.baseURL, requestOptions);
-
+		
 		if (!response.ok) {
 			const errorText = await response.text();
 			console.error('API错误响应:', errorText);
@@ -63,16 +57,19 @@ export async function getResponse(messages) {
 		}
 
 		console.log('API响应状态:', response.status);
-
-		// 【保留您成功的逻辑】下面的流处理部分完全使用您编写的、已被验证成功的代码
+		
+		// ============ 第二部分：精确的流式数据解析（来自您的正确实现） ============
 		const stream = {
 			[Symbol.asyncIterator]: async function* () {
 				const reader = response.body.getReader();
 				const decoder = new TextDecoder();
+				
+				let currentEvent = null;
 				let buffer = "";
-
+				
 				try {
 					console.log("开始处理响应流");
+					
 					while (true) {
 						const { value, done } = await reader.read();
 						if (done) {
@@ -85,22 +82,33 @@ export async function getResponse(messages) {
 						buffer = lines.pop() || '';
 						
 						for (const line of lines) {
-							if (line.trim().startsWith("event:")) {
-								// 简化处理，我们只关心 data
-							} else if (line.trim().startsWith("data:")) {
-								const dataStr = line.trim().substring(5).trim();
+							const trimmedLine = line.trim();
+							if (!trimmedLine) continue;
+							
+							if (trimmedLine.startsWith("event:")) {
+								currentEvent = trimmedLine.substring(6).trim();
+							} else if (trimmedLine.startsWith("data:")) {
+								const dataStr = trimmedLine.substring(5).trim();
+								
+								if (currentEvent === "done" || dataStr === "[DONE]") {
+									console.log("响应完成信号");
+									return; // 明确结束生成器
+								}
+								
 								try {
 									const eventData = JSON.parse(dataStr);
-									if (eventData.message && eventData.message.type === "answer") {
-										const contentChunk = eventData.message.content || "";
-										if (contentChunk) {
-											yield {
-												choices: [{ delta: { content: contentChunk } }]
-											};
-										}
+									
+									if (currentEvent === "conversation.message.delta" && 
+										eventData.role === "assistant" && 
+										eventData.type === "answer" &&
+                                        eventData.content
+                                    ) {
+										yield {
+											choices: [{ delta: { content: eventData.content } }]
+										};
 									}
 								} catch (error) {
-									// 忽略非JSON或格式不符的data行
+									// 忽略无法解析的JSON行，这在流式数据中是正常现象
 								}
 							}
 						}
@@ -111,6 +119,7 @@ export async function getResponse(messages) {
 				}
 			}
 		};
+		// =========================================================================
 
 		return stream;
 	} catch (error) {
