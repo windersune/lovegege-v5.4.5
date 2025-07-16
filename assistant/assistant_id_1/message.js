@@ -32,29 +32,44 @@ async function* createStreamReader(reader) {
 	}
 }
 
-// message.js (最终修正版)
+
 export async function getResponse(messages) {
 	// 加载包含所有参数的完整配置
-	const config = loadConfig()
+	const config = loadConfig();
 
-	// ===================================================================
-	//                        【核心修改】
-	//  我们不再对 messages 数组进行任何 slice (切片) 操作。
-	//  api.js 传过来的完整数据包将被直接使用。
-	// ===================================================================
+	// 1. 检查整个消息历史中是否包含任何图片
+	const containsImage = messages.some(msg => 
+		Array.isArray(msg.content) && msg.content.some(part => part.type === 'image_url')
+	);
 
-	// 构建包含所有调试参数的请求体
+	// 2. 如果包含图片，则确保所有用户消息都是数组格式
+	let processedMessages = messages;
+	if (containsImage) {
+		processedMessages = messages.map(msg => {
+			// 只处理 role 为 'user' 且 content 是字符串的消息
+			if (msg.role === 'user' && typeof msg.content === 'string') {
+				// 将其转换为多模态数组格式
+				return {
+					...msg,
+					content: [{ type: 'text', text: msg.content }]
+				};
+			}
+			// 其他消息（助手消息或已经是数组的用户消息）保持原样
+			return msg;
+		});
+	}
+
+	// 构建请求体
 	const requestBody = {
-		// 【重要】这里直接将完整的 messages 数组放入请求体
-		// systemPrompt 应该由前端逻辑在最开始就加入 history 数组
+		// 使用我们处理过的 processedMessages
 		messages: [
 			{ role: 'system', content: config.systemPrompt },
-			...messages,
+			...processedMessages,
+
 		],
 		model: config.modelName,
 		stream: true,
 		
-		// 从config对象中读取所有调试参数
 		temperature: Number(config.temperature),
 		top_p: Number(config.top_p),
 		max_tokens: parseInt(config.max_tokens, 10),
@@ -62,13 +77,11 @@ export async function getResponse(messages) {
 		frequency_penalty: Number(config.frequency_penalty),
 	};
 
-	// fetch调用部分保持原样
+	// ... fetch 和后续代码保持不变 ...
 	const response = await fetch(config.baseURL, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
-            // 如果您的 baseURL 不是 OpenAI 官方地址，可能不需要 Authorization
-            // 如果需要，请确保这里有 'Authorization': `Bearer ${config.apiKey}`
 		},
 		body: JSON.stringify(requestBody),
 	});
@@ -78,7 +91,6 @@ export async function getResponse(messages) {
 		throw new Error(`API请求失败: ${response.status} ${errorData}`);
 	}
 
-	// 流式响应处理部分保持原样
 	const reader = response.body.getReader();
 	return createStreamReader(reader);
 }
