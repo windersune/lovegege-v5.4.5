@@ -46,10 +46,10 @@ export const useAssistantStore = defineStore('assistant', {
       },
       {
         id: '6',
-        name: '待配置',
+        name: 'dify测试',
         description: '待配置',
         avatar: '/images/backup-assistant.png',
-        available: false,
+        available: true,
         supportsImage: false
       }
     ]
