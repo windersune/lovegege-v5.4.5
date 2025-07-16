@@ -32,14 +32,10 @@ async function* createStreamReader(reader) {
 	}
 }
 
-// message.js (最终的、正确的解决方案)
+
 export async function getResponse(messages) {
 	// 加载包含所有参数的完整配置
 	const config = loadConfig();
-
-	// ===================================================================
-	//                        【核心修改】
-	// ===================================================================
 
 	// 1. 检查整个消息历史中是否包含任何图片
 	const containsImage = messages.some(msg => 
