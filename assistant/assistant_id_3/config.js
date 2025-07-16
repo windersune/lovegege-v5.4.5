@@ -1,205 +1,79 @@
-// 直接复制dify.py中的核心逻辑到JavaScript
+import * as storage from '@/utils/storage.js'
 
-// --- 配置 ---
-const API_KEY = "app-tNfG1uJfELDK8CWUb0fanZA5"
-const API_BASE_URL = "https://api.dify.ai/v1"
-// 修改API端点为对话型应用接口
-const CHAT_ENDPOINT = `${API_BASE_URL}/chat-messages`
-const USER_ID = "my_test_user_002"
+// 保存在 localStorage 中的配置信息的 key
+const STORAGE_KEY = 'coze_config'
 
-// 全局对话历史记录状态
-const CONVERSATION_HISTORY = {};
-// --- 配置结束 ---
+// ===================================================================
+//                        【核心修改 for Coze】
+// ===================================================================
+
+// 1. Coze API 的基础 URL
+//    文档地址: https://www.coze.cn/docs/developer_guides/coze_api_reference
+const COZE_API_BASE_URL = 'https://api.coze.cn/open_api/v1/chat'
+
+// 2. [新增] 默认配置
+const DEFAULT_CONFIG = {
+	// !!! 【重要】请在这里填入您自己的 Personal Access Token !!!
+	token: 'pat_MGqWH4aLp5GhlVjp228Aagt9krgGRKgwEttkf7MtaIfmY3PIgPIABZUzGrUq84D1', 
 	
-// 返回API配置信息
+	// !!! 【重要】请在这里填入您要调用的 Bot 的 ID !!!
+	bot_id: '7500508271048966171',
+	
+	// 为用户生成一个唯一的、持久的ID，用于区分不同用户
+	user_id: '1231412425435423',
+
+    // Coze API 不支持像 aistudio 那样直接在请求中调整这些参数
+    // 这些模型参数通常在创建和调试 Bot 时在 Coze 平台上进行配置
+    // 此处保留仅为UI占位，实际API请求中不会使用
+	systemPrompt: '你现在是一个 Coze 智能体。', // 仅为UI显示，实际的System Prompt在Coze平台设置
+	temperature: 0.7,
+	top_p: 1.0,
+	max_tokens: 4096,
+	presence_penalty: 0.0,
+	frequency_penalty: 0.0
+}
+
+// ===================================================================
+
+/**
+ * 加载配置信息
+ * @returns {object} 合并后的完整配置
+ */
 export function loadConfig() {
+	// 从localStorage读取用户自定义的配置
+	const savedConfig = storage.load(STORAGE_KEY) || {};
+	
 	return {
-		apiKey: API_KEY,
-		baseURL: API_BASE_URL
+		// 固定的基础信息
+		baseURL: COZE_API_BASE_URL,
+		
+		// 将默认配置与用户保存的配置合并
+		// 用户保存的值会覆盖默认值
+		...DEFAULT_CONFIG,
+		...savedConfig
 	}
 }
 
-// 兼容接口
-export function hasValidConfig() {
-	return true;
+/**
+ * 保存配置信息到 localStorage
+ * @param {object} config - 需要保存的配置对象
+ */
+export function saveConfig(config) {
+	// 只保存用户可以修改的、与Coze相关的核心字段
+	const configToSave = {
+		token: config.token,
+		bot_id: config.bot_id,
+		user_id: config.user_id,
+        // 其他参数（如temperature等）不保存，因为它们由Coze平台控制
+	};
+	storage.save(STORAGE_KEY, configToSave)
 }
 
-// 格式化对话历史为context
-export function formatContextForWorkflow(history, currentQuery) {
-	const formattedLines = [];
-	
-	// 添加历史记录
-	for (const message of history) {
-		const role = message.role === 'user' ? 'User' : 'Assistant';
-		formattedLines.push(`${role}: ${message.content}`);
-	}
-	
-	// 添加当前查询
-	formattedLines.push(`User: ${currentQuery}`);
-	
-	return formattedLines.join('\n');
-}
-
-// 主要的API调用函数
-export async function runDifyWorkflowStream(
-	query, 
-	conversationId = null, 
-	onDataCallback, 
-	onDoneCallback, 
-	onErrorCallback,
-	messageHistory = null
-) {
-	try {
-		console.log(`[DEBUG] 开始调用对话API，conversation_id=${conversationId}`);
-		
-		// 准备请求体 - 严格按照Dify对话型应用API格式
-		const payload = {
-			query: query,
-			response_mode: "streaming",
-			user: USER_ID,
-			inputs: {
-				text: query  // 添加必需的text字段
-			}
-		};
-		
-		// 如果有conversation_id，添加到请求中
-		if (conversationId) {
-			payload.conversation_id = conversationId;
-			console.log(`[DEBUG] 添加会话ID到请求: ${conversationId}`);
-		}
-		
-		console.log(`[DEBUG] 请求参数: `, JSON.stringify(payload));
-		
-		// 发送请求
-		const response = await fetch(CHAT_ENDPOINT, {
-			method: 'POST',
-			headers: {
-				'Authorization': `Bearer ${API_KEY}`,
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify(payload)
-		});
-		
-		// 处理错误
-		if (response.status !== 200) {
-			const errorText = await response.text();
-			console.error(`[ERROR] 请求失败: ${response.status}`);
-			console.error(`[ERROR] 响应内容: ${errorText}`);
-			throw new Error(`对话API调用失败: ${response.statusText}`);
-		}
-		
-		// 处理流式响应
-		const reader = response.body.getReader();
-		const decoder = new TextDecoder();
-		let buffer = '';
-		let fullResponse = '';
-		let newConversationId = null;
-		
-		// 逐块处理响应流
-		while (true) {
-			const { value, done } = await reader.read();
-			
-			if (done) {
-				if (onDoneCallback) {
-					onDoneCallback();
-				}
-				break;
-			}
-			
-			buffer += decoder.decode(value, { stream: true });
-			
-			// 按行处理数据，Dify的SSE响应格式是data: {...}\n\n
-			let lineEndIndex;
-			while ((lineEndIndex = buffer.indexOf('\n\n')) !== -1) {
-				const line = buffer.substring(0, lineEndIndex);
-				buffer = buffer.substring(lineEndIndex + 2);
-				
-				// 处理数据行，它应该以 "data:" 开头
-				if (line.startsWith('data:')) {
-					const jsonStr = line.substring(5).trim();
-					if (jsonStr) {
-						try {
-							const data = JSON.parse(jsonStr);
-							
-							// 提取conversation_id
-							if (data.conversation_id && !newConversationId) {
-								newConversationId = data.conversation_id;
-								console.log(`[DEBUG] 从响应中获取会话ID: ${newConversationId}`);
-							}
-							
-							// 提取回答内容
-							let content = '';
-							
-							// 根据事件类型提取数据
-							if (data.event === 'message') {
-								// 消息事件，包含answer字段
-								if (data.answer) {
-									content = data.answer;
-								}
-								
-								if (content) {
-									console.log(`[DEBUG] 接收消息块: ${content}`);
-									fullResponse += content;
-									if (onDataCallback) {
-										onDataCallback(data, content);
-									}
-								}
-							} else if (data.event === 'message_end') {
-								// 消息结束事件，可以获取元数据
-								console.log(`[DEBUG] 消息结束`);
-								if (data.metadata) {
-									console.log(`[DEBUG] 使用元数据: `, JSON.stringify(data.metadata));
-								}
-							} else if (data.event === 'error') {
-								// 错误事件
-								const errorMsg = data.message || '未知流式错误';
-								console.error(`[ERROR] 流错误: ${errorMsg}`);
-								if (onErrorCallback) {
-									onErrorCallback(new Error(errorMsg));
-								}
-							}
-						} catch (e) {
-							console.warn(`[WARN] JSON解析错误: ${e.message}, 原始数据: ${jsonStr}`);
-						}
-					}
-				}
-			}
-		}
-		
-		// 确定最终的会话ID
-		const finalConversationId = newConversationId || conversationId;
-		console.log(`[DEBUG] 最终会话ID: ${finalConversationId}`);
-		
-		// 更新对话历史
-		if (finalConversationId && fullResponse) {
-			if (!CONVERSATION_HISTORY[finalConversationId]) {
-				CONVERSATION_HISTORY[finalConversationId] = [];
-			}
-			
-			// 添加用户消息
-			CONVERSATION_HISTORY[finalConversationId].push({
-				role: 'user',
-				content: query
-			});
-			
-			// 添加助手消息
-			CONVERSATION_HISTORY[finalConversationId].push({
-				role: 'assistant',
-				content: fullResponse
-			});
-			
-			console.log(`[DEBUG] 更新历史记录，当前长度: ${CONVERSATION_HISTORY[finalConversationId].length}`);
-		}
-		
-		return {
-			conversationId: finalConversationId,
-			response: fullResponse
-		};
-	} catch (error) {
-		console.error(`[ERROR] 对话API调用异常: ${error.message}`);
-		if (onErrorCallback) {
-			onErrorCallback(error);
-		}
-		throw error;
-	}
+/**
+ * 判断配置是否有效
+ * @param {object} config - 配置对象
+ * @returns {boolean} 如果 token 和 bot_id 都已填写，则返回 true
+ */
+export function hasValidConfig(config) {
+	return config && config.token && config.bot_id;
 }
