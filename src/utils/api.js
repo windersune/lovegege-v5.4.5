@@ -52,12 +52,18 @@ export async function sendMessage(assistantId, message, image = null, history = 
     }
 
     // 如果有图片，添加图片信息到最后一条用户消息
+// 修正后的代码
     if (image && messages.length > 0) {
-      const imageBase64 = await fileToBase64(image);
-      // 找到最后一条用户消息
+      // 直接使用传入的 image 变量，因为它已经是 Base64 格式的 URL
+      const imageBase64 = image; 
+      
+      // 找到最后一条用户消息并附加图片
       for (let i = messages.length - 1; i >= 0; i--) {
         if (messages[i].role === 'user') {
-          messages[i].image = imageBase64;
+          // 确保 messages[i] 存在并且是一个对象
+          if (messages[i]) {
+            messages[i].image = imageBase64;
+          }
           break;
         }
       }
