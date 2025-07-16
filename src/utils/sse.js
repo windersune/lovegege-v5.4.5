@@ -1,36 +1,33 @@
 /**
- * 处理SSE（Server-Sent Events）流式响应 (已修复)
+ * 处理SSE（Server-Sent Events）流式响应 (最终修复版 - 解决循环依赖)
+ * 采用依赖注入模式，由调用者提供获取数据流的函数。
+ *
+ * @param {Function} streamFetcher - 一个【函数】，当被调用时，它必须返回一个 Promise，该 Promise 解析为一个包含流式 body 的 Response 对象。
+ * @param {Function} onMessage - 接收消息片段的回调函数。
+ * @param {Function} onComplete - 完成时的回调函数。
+ * @param {Function} onError - 错误处理回调函数。
  */
-export function handleSSE(url, data, onMessage, onComplete, onError, options = {}) {
-  const { assistant_type, message, image, history } = data;
+export function handleSSE(streamFetcher, onMessage, onComplete, onError) {
   let aborted = false;
-  const controller = new AbortController();
+  // AbortController 仍然是可选的，但好的实践是保留它
+  const controller = new AbortController(); 
 
   const abort = () => {
     aborted = true;
-    controller.abort();
+    controller.abort(); // 如果 streamFetcher 内部使用了 signal，这将非常有用
+    console.log('SSE stream aborted by caller.');
   };
 
   const processStream = async () => {
     try {
-      const { sendMessage } = await import('./api.js');
-      
-      // 【关键修复点】: 完整地传递历史记录，包括图片
-      const formattedHistory = history || [];
-      
-      // 【日志修复】: 打印真实、有用的信息
-      console.log('SSE层: 准备调用API, 载荷:', {
-        assistant_type,
-        message,
-        image_exists: !!image, // 只记录图片是否存在
-        history_length: formattedHistory.length
-      });
-      
-      // 调用助手API, `image` 参数已经是base64
-      const response = await sendMessage(assistant_type, message, image, formattedHistory);
+      // 不再动态导入！直接执行调用者提供的函数来获取响应。
+      console.log('SSE层: 执行 streamFetcher 以获取响应...');
+      const response = await streamFetcher();
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response || !response.ok) {
+        // 尝试从失败的响应中读取错误信息
+        const errorText = await response?.text() || 'Unknown HTTP error';
+        throw new Error(`HTTP error! status: ${response?.status}, message: ${errorText}`);
       }
 
       const reader = response.body.getReader();
@@ -59,7 +56,7 @@ export function handleSSE(url, data, onMessage, onComplete, onError, options = {
       
     } catch (error) {
       if (aborted) return;
-      console.error('SSE处理错误:', error);
+      console.error('SSE处理或网络请求错误:', error);
       onError(error);
     }
   };
@@ -70,27 +67,34 @@ export function handleSSE(url, data, onMessage, onComplete, onError, options = {
     try {
       if (chunk.startsWith('data: ')) {
         const jsonStr = chunk.substring(6);
+        // 增加对特殊标记 `[DONE]` 的处理（如果后端使用）
+        if (jsonStr.trim() === '[DONE]') {
+          return;
+        }
         try {
           const data = JSON.parse(jsonStr);
           if (data.error) {
-            console.error('SSE返回错误:', data.content);
+            console.error('SSE流中返回错误:', data.content);
             onError(new Error(data.content));
             return;
           }
           onMessage(data.content || data.text || '');
         } catch (e) {
+          // 如果解析失败，可能只是纯文本块
           onMessage(jsonStr);
         }
       } else {
+        // 处理非 'data:' 开头的行（虽然不常见，但为了健壮性）
         onMessage(chunk);
       }
     } catch (error) {
       console.error('处理SSE块时出错:', error);
-      onMessage(chunk);
+      onMessage(chunk); // 降级处理
     }
   };
 
   processStream();
   
+  // 返回中止函数，允许外部代码中止处理
   return { abort };
 }
