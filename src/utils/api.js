@@ -1,6 +1,5 @@
 // src/utils/api.js
 
-// 导入助手消息处理模块函数
 const assistantModules = {
   1: () => import('../../assistant/assistant_id_1/message.js'),
   2: () => import('../../assistant/assistant_id_2/message.js'),
@@ -14,9 +13,9 @@ const assistantModules = {
  * 发送消息到AI助手 (已修复)
  * @param {string} assistantId - 助手ID
  * @param {string} message - 用户消息文本
- * @param {string|null} imageBase64 - 【注意】这里接收的已经是处理好的Base64字符串
- * @param {Array} history - 消息历史记录
- * @returns {Promise}
+ * @param {string|null} imageBase64 - 【重要】这里接收的已经是处理好的Base64字符串
+ * @param {Array} history - 完整的消息历史记录
+ * @returns {Promise<Response>}
  */
 export async function sendMessage(assistantId, message, imageBase64 = null, history = []) {
   try {
@@ -27,8 +26,10 @@ export async function sendMessage(assistantId, message, imageBase64 = null, hist
 
     const assistantModule = await getAssistantModule();
 
+    // 准备消息格式，从历史记录开始
     const messages = [...history];
     
+    // 创建当前用户的消息
     const currentUserMessage = {
       role: 'user',
       content: message || '' // 确保 content 始终存在
@@ -39,24 +40,21 @@ export async function sendMessage(assistantId, message, imageBase64 = null, hist
       currentUserMessage.image = imageBase64;
     }
 
+    // 将当前用户的完整消息添加到数组末尾
     messages.push(currentUserMessage);
 
     // 创建一个模拟的流式响应
     const { readable, writable } = new TransformStream();
-    const response = {
-      ok: true,
+    const response = new Response(readable, {
       status: 200,
-      body: readable,
-      headers: new Headers({ 'Content-Type': 'text/event-stream' })
-    };
+      headers: { 'Content-Type': 'text/event-stream' }
+    });
 
     (async () => {
       const writer = writable.getWriter();
       const encoder = new TextEncoder();
       
       try {
-        console.log('API层: 准备发送消息到真实助手API, 消息数量:', messages.length);
-        
         const stream = await assistantModule.getResponse(messages);
         
         for await (const chunk of stream) {
@@ -67,7 +65,6 @@ export async function sendMessage(assistantId, message, imageBase64 = null, hist
           }
         }
       } catch (error) {
-        console.error('助手响应处理错误:', error);
         const errorData = JSON.stringify({ error: true, content: error.message || '处理请求时出错' });
         writer.write(encoder.encode(`data: ${errorData}\n\n`));
       } finally {
@@ -96,14 +93,11 @@ export async function uploadImage(file) {
 }
 
 /**
- * 将图片文件转换为Base64 (保持不变, 但现在只有 chat.vue 会调用它)
+ * 将图片文件转换为Base64 (增加健壮性)
  */
 export function fileToBase64(file) {
-  // 【健壮性优化】: 增加对非Blob类型参数的防护
   if (!(file instanceof Blob)) {
-    console.error("fileToBase64 接收到无效参数:", file);
-    // 返回一个解析为 null 的 Promise，避免崩溃
-    return Promise.resolve(null); 
+    return Promise.resolve(null); // 如果传入的不是文件或Blob，直接返回null，避免崩溃
   }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
