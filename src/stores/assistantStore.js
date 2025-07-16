@@ -34,7 +34,7 @@ export const useAssistantStore = defineStore('assistant', {
         description: '我只能在公共网络/wifi情况下使用，移动网络不行哦',
         avatar: '/images/7.12-4.jpg',
         available: true,
-        supportsImage: false
+        supportsImage: true
       },
       {
         id: '5',
