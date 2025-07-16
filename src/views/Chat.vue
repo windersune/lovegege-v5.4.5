@@ -123,7 +123,8 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, onBeforeMou
 import { useRoute, useRouter } from 'vue-router';
 import { useAssistantStore } from '../stores/assistantStore';
 import { useChatStore } from '../stores/chatStore';
-import { sendMessage as apiSendMessage, fileToBase64 } from '../utils/api';
+// 【重要】: 现在 chat.vue 需要同时导入这两个函数
+import { fileToBase64, sendMessage as apiSendMessage } from '../utils/api';
 import { handleSSE } from '../utils/sse';
 
 import ChatHeader from '../components/chat/ChatHeader.vue';
@@ -154,54 +155,15 @@ const getSuggestions = () => {
   
   switch(assistant.value.id) {
     case '1': 
-      return [
-        "打电话的开场白怎么说啊？",
-        "面试怎么提问啊？",
-        "怎么解释公式性质",
-        "面试过程怎么提高？"
-      ];
+      return ["打电话的开场白怎么说啊？", "面试怎么提问啊？", "怎么解释公式性质", "面试过程怎么提高？"];
     case '2': 
-      return [
-        "乙＋丁",
-        "杜门＋丁",
-        "景门＋壬",
-        "壬＋丁"
-      ];
+      return ["乙＋丁", "杜门＋丁", "景门＋壬", "壬＋丁"];
     case '3':
-      return [
-        "请你帮我解决复杂问题",
-        "请问你能做些什么？",
-        "如何有效地进行决策分析？",
-        "你能给我一些使用建议吗？"
-      ];
+      return ["请你帮我解决复杂问题", "请问你能做些什么？", "如何有效地进行决策分析？", "你能给我一些使用建议吗？"];
     case '4': 
-      return [
-        "如何培养批判性思维？",
-        "请帮我分析这个问题的多个角度",
-        "如何有效地进行决策分析？",
-        "辩证思维具体应该如何运用？"
-      ];
-    case '5': 
-      return [
-        "你好，我有什么可以帮到你的？",
-        "请问你能做些什么？",
-        "我想了解更多关于你的信息",
-        "如何有效地进行决策分析？"
-      ];
-    case '6': 
-      return [
-        "你好，我有什么可以帮到你的？",
-        "请问你能做些什么？",
-        "我想了解更多关于你的信息",
-        "你能给我一些使用建议吗？"
-      ];
+      return ["如何培养批判性思维？", "请帮我分析这个问题的多个角度", "如何有效地进行决策分析？", "辩证思维具体应该如何运用？"];
     default:
-      return [
-        "你好，我有什么可以帮到你的？",
-        "请问你能做些什么？",
-        "我想了解更多关于你的信息",
-        "你能给我一些使用建议吗？"
-      ];
+      return ["你好，我有什么可以帮到你的？", "请问你能做些什么？", "我想了解更多关于你的信息", "你能给我一些使用建议吗？"];
   }
 };
 
@@ -217,7 +179,7 @@ onBeforeMount(() => {
 
 // 使用提示建议
 const usePromptSuggestion = (suggestion) => {
-  sendMessage(suggestion);
+  sendMessage(suggestion, null);
 };
 
 // 监听消息变化，自动滚动到底部
@@ -249,11 +211,9 @@ const goBack = () => {
     currentSSEConnection.abort();
     currentSSEConnection = null;
   }
-  
   chatStore.clearMessages();
   chatStore.setError(null);
   chatStore.setLoading(false);
-  
   router.push('/');
 };
 
@@ -263,145 +223,117 @@ const startNewChat = () => {
     currentSSEConnection.abort();
     currentSSEConnection = null;
   }
-  
   chatStore.clearMessages();
   chatStore.setError(null);
   chatStore.setLoading(false);
-  
-  nextTick(() => {
-    console.log('开始新对话 - 历史记录已清除');
-  });
+  console.log('开始新对话 - 历史记录已清除');
 };
 
-// 定义取消当前SSE连接的函数
 let currentSSEConnection = null;
 
+/**
+ * 发送消息的核心函数 (适配最终版sse.js)
+ * @param {string} text - 用户输入的文本
+ * @param {File|string|null} image - 新上传的图片文件(File)或重试时的base64字符串
+ * @param {boolean} isRetry - 标记这是否是一次重试操作
+ */
+const sendMessage = async (text, image, isRetry = false) => {
+  if (!text && !image) return; // 允许只发送图片
 
-// =========================================================================
-// ========================== START: MODIFIED CODE =========================
-// =========================================================================
-
-// 发送消息
-const sendMessage = async (text, image) => {
-  if (!text.trim() && !image) return;
-  
   try {
     if (currentSSEConnection) {
       currentSSEConnection.abort();
-      currentSSEConnection = null;
+    }
+    
+    const historyEndIndex = isRetry ? -1 : messages.value.length;
+    const historyForApi = messages.value
+      .slice(0, historyEndIndex)
+      .map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.content,
+        image: msg.image || null
+      }));
+
+    const currentImageBase64 = await fileToBase64(image);
+    
+    if (!isRetry) {
+      chatStore.addMessage({
+        id: Date.now(),
+        content: text,
+        sender: 'user',
+        timestamp: new Date().toISOString(),
+        image: currentImageBase64
+      });
     }
 
-    // 【关键修改点 1】：智能处理图片数据
-    // 检查 image 参数，如果已经是 base64 字符串 (来自重试) 则直接使用，否则进行转换 (来自新上传)
-    let currentImageBase64 = null;
-    if (image) {
-      if (typeof image === 'string' && image.startsWith('data:image')) {
-        // 当 'image' 是 base64 字符串时直接赋值
-        currentImageBase64 = image;
-      } else if (image instanceof Blob) {
-        // 当 'image' 是 File 或 Blob 对象时，调用转换函数
-        currentImageBase64 = await fileToBase64(image);
-      } else {
-        console.error('无效的图片数据类型:', image);
-        // 可以选择在这里设置一个错误状态并返回
-        chatStore.setError('提供了无效的图片格式。');
-        return;
-      }
-    }
-
-    // 注意：当前重试逻辑会在消息列表中创建一条重复的用户消息。
-    // 更完善的实现方式是在 chatStore 中添加一个方法来替换最后一条失败的消息，而不是简单地添加。
-    // 为保持最小改动，此处暂时保留该行为。
-    
-    // 添加用户消息到聊天记录
-    chatStore.addMessage({
-      id: Date.now(),
-      content: text,
-      sender: 'user',
-      timestamp: new Date().toISOString(),
-      image: currentImageBase64 // <-- 使用已经处理好的 base64 数据
-    });
-    
     chatStore.setLoading(true);
     chatStore.setError(null);
-    
-    // 添加AI消息占位符
+
     chatStore.addMessage({
       id: Date.now() + 1,
       content: '',
       sender: 'ai',
       timestamp: new Date().toISOString()
     });
-    
-    // 获取历史消息（除了最后的空白助手消息）
-    const historyMessages = messages.value
-      .slice(0, -1)
-      .filter(msg => msg.sender === 'user' || (msg.sender === 'ai' && msg.content.trim() !== ''))
-      .map(msg => ({
-        role: msg.sender === 'user' ? 'user' : 'assistant',
-        content: msg.content,
-        image: msg.image
-      }));
-    
-    console.log('发送消息 - 最终历史记录:', historyMessages);
-    
-    // 发送消息到API
+
+    const payload = {
+      assistant_type: assistant.value.id,
+      message: text,
+      image: currentImageBase64,
+      history: historyForApi
+    };
+
+    // 【重要】: 这是新的调用方式
+    // 第一个参数是一个函数，它负责调用真实的API
+    const streamFetcher = () => apiSendMessage(
+      payload.assistant_type,
+      payload.message,
+      payload.image,
+      payload.history
+    );
+
     currentSSEConnection = handleSSE(
-      '/api/chat',
-      { 
-        assistant_type: assistant.value.id, 
-        message: text, 
-        image: currentImageBase64, // <-- 使用已经处理好的 base64 数据
-        history: historyMessages
-      },
+      streamFetcher, // 依赖注入！
       (chunk) => {
-        if (typeof chunk === 'string' && chunk.includes('[正在重新连接...')) {
-          chatStore.updateLastAiMessage((prev) => 
-            prev + `<span class="text-yellow-500 text-xs">${chunk}</span><br/>`
-          );
-        } else {
-          chatStore.updateLastAiMessage((prev) => prev + chunk);
-        }
+        chatStore.updateLastAiMessage((prev) => prev + chunk);
       },
       () => {
         chatStore.setLoading(false);
         currentSSEConnection = null;
       },
-      (error) => {
-        console.error('SSE错误:', error);
-        chatStore.setError('很抱歉，服务暂时遇到问题，请稍后再试~');
+      (err) => {
+        console.error('来自SSE的错误回调:', err);
+        chatStore.setError('服务暂时遇到问题，请重试。');
         chatStore.setLoading(false);
         currentSSEConnection = null;
       }
     );
-  } catch (error) {
-    console.error('发送消息错误:', error);
-    chatStore.setError('很抱歉，服务暂时遇到问题，请稍后再试~');
+
+  } catch (err) {
+    console.error('前端发送逻辑错误:', err);
+    chatStore.setError(`发送失败: ${err.message}`);
     chatStore.setLoading(false);
-    currentSSEConnection = null;
   }
 };
 
-// 重试最后一条消息
+/**
+ * 重试最后一条消息 (最终版)
+ */
 const retryLastMessage = () => {
+  // 先从UI上移除失败的AI消息占位符和错误提示
+  if (messages.value.length > 0 && messages.value[messages.value.length - 1].sender === 'ai') {
+    chatStore.removeLastMessage();
+  }
+  chatStore.setError(null);
+
   // 找到最后一条用户消息
-  const lastUserMessage = [...messages.value]
-    .reverse()
-    .find(message => message.sender === 'user');
+  const lastUserMessage = [...messages.value].reverse().find(m => m.sender === 'user');
   
   if (lastUserMessage) {
-    chatStore.setError(null);
-    
-    // 【关键修改点 2】: 确保在重试时传递图片数据 (之前是 null)
-    // `lastUserMessage.image` 此时是 base64 字符串，`sendMessage` 函数已被修改以处理这种情况。
-    sendMessage(lastUserMessage.content, lastUserMessage.image);
+    // 调用核心函数，并标记为重试
+    sendMessage(lastUserMessage.content, lastUserMessage.image, true);
   }
 };
-
-// =======================================================================
-// ========================== END: MODIFIED CODE =========================
-// =======================================================================
-
 
 // 组件卸载时清理资源
 onBeforeUnmount(() => {
