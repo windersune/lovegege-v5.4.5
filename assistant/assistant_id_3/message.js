@@ -1,137 +1,89 @@
-import { runDifyWorkflowStream } from './config.js'
+import { loadConfig, hasValidConfig } from './config.js'
 
-// 一个休眠函数，让程序等待一段时间（单位 ms）
-function sleep(ms) {
-	return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-// 这个函数用来模拟一个 API 请求，一秒钟后返回字符串
-export async function getMockResponse() {
-	await sleep(1000)
-	return '这是一条模拟的回复'
-}
-
-// 维护当前对话ID，每个会话中保持一致
-let currentConversationId = null;
-
-// 主要的响应获取函数
-export async function getResponse(messages) {
-	console.log(`[MESSAGE] 处理对话历史记录，共 ${messages.length} 条消息`);
-	console.log(`[MESSAGE] 当前对话ID: ${currentConversationId}`);
+// createStreamReader 函数与您提供的版本保持一致，因为它是一个通用的SSE解析器
+async function* createStreamReader(reader) {
+	const decoder = new TextDecoder();
+	let buffer = '';
 	
-	// 提取用户最后一条消息内容
-	let userMessage = '';
-	for (let i = messages.length - 1; i >= 0; i--) {
-		if (messages[i].role === 'user') {
-			userMessage = messages[i].content;
-			break;
+	while (true) {
+		const { value, done } = await reader.read();
+		if (done) break;
+		
+		buffer += decoder.decode(value, { stream: true });
+		const lines = buffer.split('\n');
+		buffer = lines.pop() || '';
+		
+		for (const line of lines) {
+			if (line.trim().startsWith('data: ')) {
+				try {
+					const json = JSON.parse(line.trim().slice(6));
+					yield json;
+				} catch (e) {
+					console.error('解析Coze SSE数据出错:', e);
+				}
+			}
 		}
 	}
-	
-	console.log(`[MESSAGE] 用户当前消息: ${userMessage.substring(0, 50)}...`);
-	
-	// 创建一个异步迭代器来处理流式响应
-	const streamAsync = async function* () {
-		try {
-			// 收集响应内容的队列
-			const responseChunks = [];
-			let responseComplete = false;
-			let responseError = null;
-			
-			// 创建一个Promise来等待响应完成
-			const responsePromise = new Promise((resolve, reject) => {
-				// 调用Dify对话API，传递完整消息历史以保持上下文
-				runDifyWorkflowStream(
-					userMessage,           // 用户当前消息
-					currentConversationId, // 当前对话ID
-					(data, chunk) => {     // 数据回调
-						if (chunk) {
-							// 接收到内容块，添加到队列
-							responseChunks.push({
-								choices: [
-									{
-										delta: {
-											content: chunk
-										}
-									}
-								]
-							});
-						}
-					},
-					() => {  // 完成回调
-						console.log(`[MESSAGE] 对话响应完成`);
-						responseComplete = true;
-						resolve();
-					},
-					(error) => {  // 错误回调
-						console.error(`[MESSAGE] 对话错误: ${error.message}`);
-						responseError = error;
-						responseComplete = true;
-						reject(error);
-					},
-					messages  // 添加完整消息历史作为新参数
-				).then(result => {
-					// 处理结果，保存会话ID
-					if (result && result.conversationId) {
-						console.log(`[MESSAGE] 会话ID: ${result.conversationId}`);
-						currentConversationId = result.conversationId;
-					}
-					responseComplete = true;
-					resolve();
-				}).catch(error => {
-					console.error(`[MESSAGE] 请求异常: ${error.message}`);
-					responseError = error;
-					responseComplete = true;
-					reject(error);
-				});
-			});
-			
-			// 使用一个监控函数同时等待响应和检查队列
-			(async () => {
-				try {
-					await responsePromise;
-				} catch (e) {
-					// 错误已在回调中处理
-				}
-			})();
-			
-			// 处理所有响应块
-			let index = 0;
-			while (!responseComplete || index < responseChunks.length) {
-				if (index < responseChunks.length) {
-					// 有可用的响应块，处理它
-					yield responseChunks[index++];
-				} else {
-					// 等待更多响应或完成
-					await sleep(10);
-				}
-			}
-			
-			// 如果有错误，yield错误消息
-			if (responseError) {
-				yield {
-					choices: [
-						{
-							delta: {
-								content: `处理过程中出现错误: ${responseError.message}`
-							}
-						}
-					]
-				};
-			}
-		} catch (error) {
-			console.error(`[MESSAGE] 处理异常: ${error.message}`);
-			yield {
-				choices: [
-					{
-						delta: {
-							content: `处理过程中出现错误: ${error.message}`
-						}
-					}
-				]
-			};
-		}
+}
+
+/**
+ * 发送消息到 Coze API 并获取流式响应
+ * @param {Array<object>} messages - 对话历史消息数组
+ * @returns {AsyncGenerator<object, void, unknown>} - 一个异步生成器，用于逐块返回响应
+ */
+export async function getResponse(messages) {
+	const config = loadConfig();
+
+	// 1. 检查配置是否有效
+	if (!hasValidConfig(config)) {
+		throw new Error('配置无效: 请在设置中填写您的 Personal Access Token 和 Bot ID。');
+	}
+
+	// 2. 从完整的消息历史中提取最后一条用户消息作为 query
+    // Coze /chat API 只接受最新的用户输入作为 `query`
+	const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
+	if (!lastUserMessage) {
+		throw new Error('没有找到用户消息。');
+	}
+
+	// 3. 提取除最后一条用户消息外的对话历史
+    // Coze API 通过 `chat_history` 字段传递历史记录
+	const chatHistory = messages.slice(0, messages.length - 1).map(msg => ({
+		role: msg.role === 'assistant' ? 'assistant' : 'user', // 仅支持 'user' 和 'assistant'
+		content: typeof msg.content === 'string' ? msg.content : (msg.content[0]?.text || ''), // 简化处理，仅取文本部分
+	}));
+
+
+	// 4. 构建 Coze API 请求体
+	const requestBody = {
+		bot_id: config.bot_id,
+		user: config.user_id,
+		query: typeof lastUserMessage.content === 'string' 
+               ? lastUserMessage.content 
+               : (lastUserMessage.content[0]?.text || ''), // 简化处理，仅取最新的文本query
+		chat_history: chatHistory,
+		stream: true,
 	};
-	
-	return streamAsync();
+    
+    // 注意：Coze API 不支持图片输入（/chat 接口），所以我们简化了逻辑，
+    // 不再需要处理多模态 `content` 数组。如果用户上传了图片，我们只提取文本部分。
+
+	// 5. 发送 fetch 请求
+	const response = await fetch(config.baseURL, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+            // Coze API 要求使用 Bearer Token进行身份验证
+			'Authorization': `Bearer ${config.token}`, 
+		},
+		body: JSON.stringify(requestBody),
+	});
+
+	if (!response.ok) {
+		const errorData = await response.text();
+		throw new Error(`API请求失败: ${response.status} - ${errorData}`);
+	}
+
+	const reader = response.body.getReader();
+	return createStreamReader(reader);
 }
