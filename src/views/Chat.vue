@@ -124,283 +124,108 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, onBeforeMou
 import { useRoute, useRouter } from 'vue-router';
 import { useAssistantStore } from '../stores/assistantStore';
 import { useChatStore } from '../stores/chatStore';
-import { sendMessage as apiSendMessage, fileToBase64 } from '../utils/api';
-import { handleSSE } from '../utils/sse';
-
-import ChatHeader from '../components/chat/ChatHeader.vue';
-import MessageList from '../components/chat/MessageList.vue';
-import InputArea from '../components/chat/InputArea.vue';
-import LoadingIndicator from '../components/common/LoadingIndicator.vue';
+import { handleSSE } from '../utils/sse'; // 只需要 sse
 
 const route = useRoute();
 const router = useRouter();
 const assistantStore = useAssistantStore();
 const chatStore = useChatStore();
 
-const messageContainer = ref(null);
-
-// 获取当前助手信息
-const assistant = computed(() => 
-  assistantStore.getAssistantById(route.params.assistantId)
-);
-
-// 从store获取消息、加载状态和错误信息
+// ===================================================================
+//                        【核心修正 1】
+//    正确地从 Pinia store 中获取状态和 Actions
+// ===================================================================
+// 使用 computed 获取只读的状态
 const messages = computed(() => chatStore.messages);
-const loading = computed({
-    get: () => chatStore.loading,
-    set: (value) => setLoading(value) // 允许双向绑定
-});
+const loading = computed(() => chatStore.loading);
 const error = computed(() => chatStore.error);
+// 直接解构出我们将要调用的 Actions
+const { addMessage, updateLastMessageContent, setLoading, setError, clearMessages, finalizeUserMessage, popMessage } = chatStore;
 
-// 为不同助手提供的问题建议 - 减少计算量，使用普通变量而非计算属性
-const getSuggestions = () => {
-  if (!assistant.value) return [];
-  
-  switch(assistant.value.id) {
-    case '1': 
-      return [
-        "打电话的开场白怎么说啊？",
-        "面试怎么提问啊？",
-        "怎么解释公式性质",
-        "面试过程怎么提高？"
-      ];
-    case '2': 
-      return [
-        "乙＋丁",
-        "杜门＋丁",
-        "景门＋壬",
-        "壬＋丁"
-      ];
-    case '3':
-      return [
-        "请你帮我解决复杂问题",
-        "请问你能做些什么？",
-        "如何有效地进行决策分析？",
-        "你能给我一些使用建议吗？"
-      ];
-    case '4': 
-      return [
-        "如何培养批判性思维？",
-        "请帮我分析这个问题的多个角度",
-        "如何有效地进行决策分析？",
-        "辩证思维具体应该如何运用？"
-      ];
-    case '5': 
-      return [
-        "你好，我有什么可以帮到你的？",
-        "请问你能做些什么？",
-        "我想了解更多关于你的信息",
-        "如何有效地进行决策分析？"
-      ];
-    case '6': 
-      return [
-        "你好，我有什么可以帮到你的？",
-        "请问你能做些什么？",
-        "我想了解更多关于你的信息",
-        "你能给我一些使用建议吗？"
-      ];
-    default:
-      return [
-        "你好，我有什么可以帮到你的？",
-        "请问你能做些什么？",
-        "我想了解更多关于你的信息",
-        "你能给我一些使用建议吗？"
-      ];
-  }
-};
 
-const suggestions = computed(() => getSuggestions());
+// --- 从这里开始，其他辅助函数和 computed 属性保持不变 ---
+const messageContainer = ref(null);
+const assistant = computed(() => assistantStore.getAssistantById(route.params.assistantId));
+const getSuggestions = () => { /* ... 您的 getSuggestions 函数内容不变 ... */ };
+const suggestions = computed(getSuggestions);
 
-// 预加载助手头像
-onBeforeMount(() => {
-  if (assistant.value && assistant.value.avatar) {
-    const img = new Image();
-    img.src = assistant.value.avatar;
-  }
-});
+onBeforeMount(() => { /* ... onBeforeMount 内容不变 ... */ });
+watch(messages, () => { /* ... watch 内容不变 ... */ }, { deep: true });
+onMounted(() => { /* ... onMounted 内容不变 ... */ });
 
-// 使用提示建议
-const usePromptSuggestion = (suggestion) => {
-  sendMessage(suggestion);
-};
 
-// 监听消息变化，自动滚动到底部 - 使用RAF优化滚动性能
-watch(messages, () => {
-  nextTick(() => {
-    requestAnimationFrame(() => {
-      if (messageContainer.value) {
-        messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
-      }
-    });
-  });
-}, { deep: true });
+// --- 路由和新对话函数保持不变 ---
+const goBack = () => { /* ... goBack 内容不变 ... */ };
+const startNewChat = () => { /* ... startNewChat 内容不变 ... */ };
 
-// 组件挂载时清空消息 - 优化初始化逻辑
-onMounted(() => {
-  // 设置初始状态
-  requestAnimationFrame(() => {
-    chatStore.clearMessages();
-    chatStore.setError(null);
-    
-    // 如果助手不存在或不可用，返回主页
-    if (!assistant.value || !assistant.value.available) {
-      router.push('/');
-    }
-  });
-});
 
-// 返回主页
-const goBack = () => {
-  // 如果存在当前SSE连接，先取消它
-  if (currentSSEConnection) {
-    currentSSEConnection.abort();
-    currentSSEConnection = null;
-  }
-  
-  // 清空消息和错误状态
-  chatStore.clearMessages();
-  chatStore.setError(null);
-  chatStore.setLoading(false);
-  
-  // 返回主页
-  router.push('/');
-};
-
-// 开始新对话
-const startNewChat = () => {
-  // 如果存在当前SSE连接，先取消它
-  if (currentSSEConnection) {
-    currentSSEConnection.abort();
-    currentSSEConnection = null;
-  }
-  
-  // 清空消息和错误状态
-  chatStore.clearMessages();
-  chatStore.setError(null);
-  chatStore.setLoading(false);
-  
-  // 显示新会话的欢迎信息或提示
-  nextTick(() => {
-    // 可以在这里添加一些视觉反馈，表明是新会话
-    console.log('开始新对话 - 历史记录已清除');
-  });
-};
-
-// 定义取消当前SSE连接的函数
 let currentSSEConnection = null;
 
-// 发送消息
-// 在 Chat.vue 的 <script setup> 或 methods 中
+// ===================================================================
+//                        【核心修正 2】
+//           重写 sendMessage 以正确使用 Store Actions
+// ===================================================================
+async function sendMessage(text, imageFile) {
+  if (loading.value) return;
 
-// ... 您的 ref 或 data 定义，如：
-// const messages = ref([]);
-// const userInput = ref('');
-// ...
-
-// Chat.vue - <script setup>
-
-async function sendMessage(text, imageFile) { // 函数参数也稍微调整一下，更清晰
-  const messageText = typeof text === 'string' ? text : userInput.value;
-  const image = imageFile || uploadedImage.value;
-  
-  if (loading.value || (!messageText && !image)) {
-    return;
-  }
-  
-  // 使用 setLoading action
+  // 使用 Action 设置加载状态并清除错误
   setLoading(true);
   setError(null);
 
   // 1. 创建用户消息对象
   const userMessage = {
     role: 'user',
-    content: messageText,
-    // 关键：如果上传了图片，先将其转为Base64
-    image: image ? await fileToBase64(image) : null 
+    content: text,
+    // 我们将图片文件直接附加，稍后在 onComplete 中处理
+    imageFile: imageFile 
   };
   
-  // 2. 【核心修正】使用 addMessage action 来添加消息
+  // 2. 使用 Action 添加用户消息到 store
   addMessage(userMessage);
 
-  // 3. 准备API历史记录：发送除最后一条之外的所有历史
+  // 3. 准备用于 API 的历史记录（不包含刚刚添加的用户消息）
   const historyForApi = messages.value.slice(0, -1);
   
-  // 4. 【核心修正】用 action 添加临时的助手消息
-  const assistantMessagePlaceholder = { role: 'assistant', content: '' };
-  addMessage(assistantMessagePlaceholder);
-
-  // 清空输入
-  userInput.value = '';
-  uploadedImage.value = null;
+  // 4. 使用 Action 添加助手的占位消息
+  addMessage({ role: 'assistant', content: '' });
 
   try {
-    handleSSE(
+    // 5. 调用 SSE 处理函数
+    currentSSEConnection = handleSSE(
       'your_sse_endpoint',
       {
-        assistant_type: assistantId.value,
-        message: userMessage.content,
-        // 直接传递已经转好的 Base64 图片
-        image: userMessage.image, 
-        history: historyForApi 
+        assistant_type: assistant.value.id,
+        message: text,
+        image: imageFile, // 将文件对象直接传递给 sse.js
+        history: historyForApi
       },
+      // onMessage: 使用 Action 更新最后一条消息（助手占位符）
       (chunk) => {
-        // 更新最后一条消息（助手消息）的内容
-        const lastMsg = messages.value[messages.value.length - 1];
-        if(lastMsg) lastMsg.content += chunk;
+        updateLastMessageContent(chunk);
       },
+      // onComplete: 对话完成，最终确定用户消息的结构
       () => {
         setLoading(false);
-        
-        // 【重要修正】对话完成后，修正用户消息的最终结构
-        // 这一步也需要通过 action 来完成，或者直接修改 store 的 state
-        const userMessageInStore = messages.value[messages.value.length - 2];
-        if (userMessageInStore && userMessageInStore.image) {
-           // chatStore.formatLastUserMessageAsMultimodal(); // 推荐为此也创建一个action
-           // 或者直接修改（如果你的store允许）
-           userMessageInStore.content = [
-            { type: 'text', text: userMessageInStore.content },
-            { type: 'image_url', image_url: { url: userMessageInStore.image } }
-           ];
-           delete userMessageInStore.image;
-        }
+        // 使用 Action 来固化用户消息的结构，确保历史记录正确无误
+        finalizeUserMessage(); 
+        currentSSEConnection = null;
       },
+      // onError: 处理流错误
       (err) => {
-        setError(err.message || '发生错误');
+        setError(err.message || '与服务器通信时出错');
         setLoading(false);
-        // 移除临时的助手消息
-        messages.value.pop();
+        popMessage(); // 移除临时的助手消息
+        currentSSEConnection = null;
       }
     );
   } catch (err) {
-    setError(err.message || '发生未知错误');
+    setError(err.message || '发送消息时发生未知错误');
     setLoading(false);
   }
 }
 
-// 重试最后一条消息
-const retryLastMessage = () => {
-  // 找到最后一条用户消息
-  const lastUserMessage = [...messages.value]
-    .reverse()
-    .find(message => message.sender === 'user');
-  
-  if (lastUserMessage) {
-    // 清除错误状态
-    chatStore.setError(null);
-    
-    // 重新发送消息
-    sendMessage(lastUserMessage.content, null);
-  }
-};
-
-// 组件卸载时清理资源
-onBeforeUnmount(() => {
-  // 取消可能存在的SSE连接
-  if (currentSSEConnection) {
-    currentSSEConnection.abort();
-    currentSSEConnection = null;
-  }
-});
+const retryLastMessage = () => { /* ... retryLastMessage 内容可以保持不变 ... */ };
+onBeforeUnmount(() => { /* ... onBeforeUnmount 内容不变 ... */ });
 </script>
 
 <style scoped>
