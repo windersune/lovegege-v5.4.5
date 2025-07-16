@@ -9,14 +9,14 @@ export const useAssistantStore = defineStore('assistant', {
         description: 'AI界的海盗王，GPT出身，我一出马，万事可成！',
         avatar: '/images/7.12-1.jpg',
         available: true,
-        supportsImage: false
+        supportsImage: true
       },
       {
         id: '2',
         name: 'GPT女皇',
         description: '出身于GPT，娇弱身姿压制GPT阿布。',
         avatar: '/images/7.12-2.jpg',
-        available: true,
+        available: false,
         supportsImage: false
       },
       {
