@@ -32,23 +32,21 @@ async function* createStreamReader(reader) {
 	}
 }
 
+// message.js (最终修正版)
 export async function getResponse(messages) {
 	// 加载包含所有参数的完整配置
 	const config = loadConfig()
 
-	// 历史消息记录管理部分保持原样 ...
-	if (messages.length > 0) {
-		messages = messages.slice(0, -1)
-	}
-	if (messages.length > 11) {
-		messages = messages.slice(-11)
-	}
-
 	// ===================================================================
 	//                        【核心修改】
+	//  我们不再对 messages 数组进行任何 slice (切片) 操作。
+	//  api.js 传过来的完整数据包将被直接使用。
 	// ===================================================================
+
 	// 构建包含所有调试参数的请求体
 	const requestBody = {
+		// 【重要】这里直接将完整的 messages 数组放入请求体
+		// systemPrompt 应该由前端逻辑在最开始就加入 history 数组
 		messages: [
 			{ role: 'system', content: config.systemPrompt },
 			...messages,
@@ -56,8 +54,7 @@ export async function getResponse(messages) {
 		model: config.modelName,
 		stream: true,
 		
-		// [新增] 从config对象中读取所有调试参数
-		// 使用Number()和parseInt()确保类型正确，防止从localStorage读取时变成字符串
+		// 从config对象中读取所有调试参数
 		temperature: Number(config.temperature),
 		top_p: Number(config.top_p),
 		max_tokens: parseInt(config.max_tokens, 10),
@@ -65,11 +62,13 @@ export async function getResponse(messages) {
 		frequency_penalty: Number(config.frequency_penalty),
 	};
 
-	// fetch调用部分保持原样，它现在会发送包含所有参数的requestBody
+	// fetch调用部分保持原样
 	const response = await fetch(config.baseURL, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
+            // 如果您的 baseURL 不是 OpenAI 官方地址，可能不需要 Authorization
+            // 如果需要，请确保这里有 'Authorization': `Bearer ${config.apiKey}`
 		},
 		body: JSON.stringify(requestBody),
 	});
