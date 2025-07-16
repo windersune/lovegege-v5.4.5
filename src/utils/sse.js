@@ -93,4 +93,4 @@ export function handleSSE(url, data, onMessage, onComplete, onError, options = {
   processStream();
   
   return { abort };
-}```
+}
