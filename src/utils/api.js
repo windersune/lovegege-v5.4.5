@@ -58,7 +58,7 @@ export async function sendMessage(assistantId, message, imageBase64 = null, hist
         const stream = await assistantModule.getResponse(messages);
         
         for await (const chunk of stream) {
-          if (chunk.choices?.[0]?.delta?.content) {
+          if (chunk.choices?.?.delta?.content) {
             const content = chunk.choices[0].delta.content;
             const data = JSON.stringify({ content });
             writer.write(encoder.encode(`data: ${data}\n\n`));
@@ -75,19 +75,6 @@ export async function sendMessage(assistantId, message, imageBase64 = null, hist
     return response;
   } catch (error) {
     console.error('发送消息错误:', error);
-    throw error;
-  }
-}
-
-/**
- * 上传图片 (保持不变)
- */
-export async function uploadImage(file) {
-  try {
-    const base64Image = await fileToBase64(file);
-    return { url: base64Image, success: true };
-  } catch (error) {
-    console.error('上传图片错误:', error);
     throw error;
   }
 }
