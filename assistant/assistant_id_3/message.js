@@ -1,11 +1,6 @@
 import { loadConfig, hasValidConfig } from './config.js'
 
-/**
- * 【关键修改】
- * 修改 createStreamReader 函数来适配 Coze API 的响应结构。
- * Coze 在 event: 'message' 中返回内容，格式为 { message: { content: '...' } }
- * 我们需要将其转换为您前端UI期望的格式，很可能是 { choices: [{ delta: { content: '...' } }] }
- */
+// createStreamReader 函数与上一版相同，包含了格式转换逻辑
 async function* createStreamReader(reader) {
 	const decoder = new TextDecoder();
 	let buffer = '';
@@ -23,28 +18,19 @@ async function* createStreamReader(reader) {
 				try {
 					const json = JSON.parse(line.trim().slice(6));
                     
-                    // 【在这里进行转换】
-                    // 检查事件类型是否为 'message' 并且包含有效内容
 					if (json.event === 'message' && json.message && json.message.content) {
-                        // 创建一个符合旧版UI预期的对象结构
 						const formattedJson = {
-							choices: [
-								{
-									delta: {
-										content: json.message.content
-									}
-								}
-							]
+							choices: [{ delta: { content: json.message.content } }]
 						};
+                        // console.log('[DEBUG] Yielding formatted data chunk:', formattedJson); // 可以取消注释看每个数据块
 						yield formattedJson;
 					} else if (json.event === 'error') {
-                        // 如果Coze流返回错误，则将其抛出
-                        console.error('Coze API Stream Error:', json);
+                        console.error('[DEBUG] Coze API Stream Error:', json);
                         throw new Error(`Coze API Error: ${json.error.message}`);
                     }
 
 				} catch (e) {
-					console.error('解析或转换SSE数据出错:', e);
+					console.error('[DEBUG] 解析或转换SSE数据出错:', e);
 				}
 			}
 		}
@@ -53,57 +39,77 @@ async function* createStreamReader(reader) {
 
 
 /**
+ * 【终极调试版】
  * 发送消息到 Coze API 并获取流式响应
  * @param {Array<object>} messages - 对话历史消息数组
- * @returns {AsyncGenerator<object, void, unknown>} - 一个异步生成器，用于逐块返回响应
  */
 export async function getResponse(messages) {
-	const config = loadConfig();
+    // ================== 新增的调试日志 ==================
+    console.log('[DEBUG] --- getResponse function started ---');
 
-	if (!hasValidConfig(config)) {
-		throw new Error('配置无效: 请在设置中填写您的 Personal Access Token 和 Bot ID。');
-	}
+    try {
+        const config = loadConfig();
+        console.log('[DEBUG] Loaded config:', config);
 
-    // Coze /chat API 只接受最新的用户输入作为 `query`
-	const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
-	if (!lastUserMessage) {
-		throw new Error('没有找到用户消息。');
-	}
+        // 1. 检查配置是否有效
+        if (!hasValidConfig(config)) {
+            console.error('[DEBUG] 配置无效! Token 或 Bot ID 为空。');
+            throw new Error('配置无效: 请在设置中填写您的 Personal Access Token 和 Bot ID。');
+        }
+        console.log('[DEBUG] Config is valid.');
 
-    // Coze API 通过 `chat_history` 字段传递历史记录
-    // 【优化】过滤掉空的或非user/assistant角色的历史记录，确保格式正确
-	const chatHistory = messages
-        .slice(0, messages.length - 1)
-        .filter(msg => (msg.role === 'user' || msg.role === 'assistant') && msg.content)
-        .map(msg => ({
-            role: msg.role,
-            content: typeof msg.content === 'string' ? msg.content : (msg.content[0]?.text || ''),
-        }));
+        // 2. 准备请求数据
+        const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
+        if (!lastUserMessage) {
+            throw new Error('没有找到用户消息。');
+        }
 
-	const requestBody = {
-		bot_id: config.bot_id,
-		user: config.user_id,
-		query: typeof lastUserMessage.content === 'string' 
-               ? lastUserMessage.content 
-               : (lastUserMessage.content[0]?.text || ''),
-		chat_history: chatHistory,
-		stream: true,
-	};
-    
-	const response = await fetch(config.baseURL, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Bearer ${config.token}`, 
-		},
-		body: JSON.stringify(requestBody),
-	});
+        const chatHistory = messages
+            .slice(0, messages.length - 1)
+            .filter(msg => (msg.role === 'user' || msg.role === 'assistant') && msg.content)
+            .map(msg => ({
+                role: msg.role,
+                content: typeof msg.content === 'string' ? msg.content : (msg.content[0]?.text || ''),
+            }));
 
-	if (!response.ok) {
-		const errorData = await response.text();
-		throw new Error(`API请求失败: ${response.status} - ${errorData}`);
-	}
+        const requestBody = {
+            bot_id: config.bot_id,
+            user: config.user_id,
+            query: typeof lastUserMessage.content === 'string' 
+                   ? lastUserMessage.content 
+                   : (lastUserMessage.content[0]?.text || ''),
+            chat_history: chatHistory,
+            stream: true,
+        };
+        console.log('[DEBUG] Preparing to send request with body:', JSON.stringify(requestBody, null, 2));
 
-	const reader = response.body.getReader();
-	return createStreamReader(reader);
+        // 3. 发送 fetch 请求
+        console.log('[DEBUG] Sending fetch request to:', config.baseURL);
+        const response = await fetch(config.baseURL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.token}`, 
+            },
+            body: JSON.stringify(requestBody),
+        });
+        console.log('[DEBUG] Received fetch response header.');
+
+        // 4. 检查响应状态
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[DEBUG] API请求失败: ${response.status}`, errorText);
+            throw new Error(`API请求失败: ${response.status} - ${errorText}`);
+        }
+        console.log('[DEBUG] Response is OK (200). Creating stream reader.');
+
+        // 5. 返回流式读取器
+        const reader = response.body.getReader();
+        return createStreamReader(reader);
+
+    } catch (error) {
+        console.error('[DEBUG] --- Catched an error in getResponse ---', error);
+        // 将错误向上抛出，以便UI层可以捕获它（如果UI有相应处理）
+        throw error;
+    }
 }
