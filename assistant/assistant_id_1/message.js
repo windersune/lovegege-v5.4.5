@@ -1,137 +1,85 @@
-import { runDifyWorkflowStream } from './config.js'
+import { loadConfig } from './config.js'
 
-// 一个休眠函数，让程序等待一段时间（单位 ms）
+// ... sleep 和 createStreamReader 函数保持原样 ...
 function sleep(ms) {
 	return new Promise(resolve => setTimeout(resolve, ms))
 }
-
-// 这个函数用来模拟一个 API 请求，一秒钟后返回字符串
-export async function getMockResponse() {
-	await sleep(1000)
-	return '这是一条模拟的回复'
-}
-
-// 维护当前对话ID，每个会话中保持一致
-let currentConversationId = null;
-
-// 主要的响应获取函数
-export async function getResponse(messages) {
-	console.log(`[MESSAGE] 处理对话历史记录，共 ${messages.length} 条消息`);
-	console.log(`[MESSAGE] 当前对话ID: ${currentConversationId}`);
+async function* createStreamReader(reader) {
+	const decoder = new TextDecoder();
+	let buffer = '';
 	
-	// 提取用户最后一条消息内容
-	let userMessage = '';
-	for (let i = messages.length - 1; i >= 0; i--) {
-		if (messages[i].role === 'user') {
-			userMessage = messages[i].content;
-			break;
+	while (true) {
+		const { value, done } = await reader.read();
+		if (done) break;
+		
+		buffer += decoder.decode(value, { stream: true });
+		const lines = buffer.split('\n');
+		buffer = lines.pop() || '';
+		
+		for (const line of lines) {
+			const trimmedLine = line.trim();
+			if (!trimmedLine || trimmedLine === 'data: [DONE]') continue;
+			
+			if (trimmedLine.startsWith('data: ')) {
+				try {
+					const json = JSON.parse(trimmedLine.slice(6));
+					yield json;
+				} catch (e) {
+					console.error('解析SSE数据出错:', e);
+				}
+			}
 		}
 	}
-	
-	console.log(`[MESSAGE] 用户当前消息: ${userMessage.substring(0, 50)}...`);
-	
-	// 创建一个异步迭代器来处理流式响应
-	const streamAsync = async function* () {
-		try {
-			// 收集响应内容的队列
-			const responseChunks = [];
-			let responseComplete = false;
-			let responseError = null;
-			
-			// 创建一个Promise来等待响应完成
-			const responsePromise = new Promise((resolve, reject) => {
-				// 调用Dify对话API，传递完整消息历史以保持上下文
-				runDifyWorkflowStream(
-					userMessage,           // 用户当前消息
-					currentConversationId, // 当前对话ID
-					(data, chunk) => {     // 数据回调
-						if (chunk) {
-							// 接收到内容块，添加到队列
-							responseChunks.push({
-								choices: [
-									{
-										delta: {
-											content: chunk
-										}
-									}
-								]
-							});
-						}
-					},
-					() => {  // 完成回调
-						console.log(`[MESSAGE] 对话响应完成`);
-						responseComplete = true;
-						resolve();
-					},
-					(error) => {  // 错误回调
-						console.error(`[MESSAGE] 对话错误: ${error.message}`);
-						responseError = error;
-						responseComplete = true;
-						reject(error);
-					},
-					messages  // 添加完整消息历史作为新参数
-				).then(result => {
-					// 处理结果，保存会话ID
-					if (result && result.conversationId) {
-						console.log(`[MESSAGE] 会话ID: ${result.conversationId}`);
-						currentConversationId = result.conversationId;
-					}
-					responseComplete = true;
-					resolve();
-				}).catch(error => {
-					console.error(`[MESSAGE] 请求异常: ${error.message}`);
-					responseError = error;
-					responseComplete = true;
-					reject(error);
-				});
-			});
-			
-			// 使用一个监控函数同时等待响应和检查队列
-			(async () => {
-				try {
-					await responsePromise;
-				} catch (e) {
-					// 错误已在回调中处理
-				}
-			})();
-			
-			// 处理所有响应块
-			let index = 0;
-			while (!responseComplete || index < responseChunks.length) {
-				if (index < responseChunks.length) {
-					// 有可用的响应块，处理它
-					yield responseChunks[index++];
-				} else {
-					// 等待更多响应或完成
-					await sleep(10);
-				}
-			}
-			
-			// 如果有错误，yield错误消息
-			if (responseError) {
-				yield {
-					choices: [
-						{
-							delta: {
-								content: `处理过程中出现错误: ${responseError.message}`
-							}
-						}
-					]
-				};
-			}
-		} catch (error) {
-			console.error(`[MESSAGE] 处理异常: ${error.message}`);
-			yield {
-				choices: [
-					{
-						delta: {
-							content: `处理过程中出现错误: ${error.message}`
-						}
-					}
-				]
-			};
-		}
+}
+
+export async function getResponse(messages) {
+	// 加载包含所有参数的完整配置
+	const config = loadConfig()
+
+	// 历史消息记录管理部分保持原样 ...
+	if (messages.length > 0) {
+		messages = messages.slice(0, -1)
+	}
+	if (messages.length > 11) {
+		messages = messages.slice(-11)
+	}
+
+	// ===================================================================
+	//                        【核心修改】
+	// ===================================================================
+	// 构建包含所有调试参数的请求体
+	const requestBody = {
+		messages: [
+			{ role: 'system', content: config.systemPrompt },
+			...messages,
+		],
+		model: config.modelName,
+		stream: true,
+		
+		// [新增] 从config对象中读取所有调试参数
+		// 使用Number()和parseInt()确保类型正确，防止从localStorage读取时变成字符串
+		temperature: Number(config.temperature),
+		top_p: Number(config.top_p),
+		max_tokens: parseInt(config.max_tokens, 10),
+		presence_penalty: Number(config.presence_penalty),
+		frequency_penalty: Number(config.frequency_penalty),
 	};
-	
-	return streamAsync();
+
+	// fetch调用部分保持原样，它现在会发送包含所有参数的requestBody
+	const response = await fetch(config.baseURL, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify(requestBody),
+	});
+
+	if (!response.ok) {
+		const errorData = await response.text();
+		throw new Error(`API请求失败: ${response.status} ${errorData}`);
+	}
+
+	// 流式响应处理部分保持原样
+	const reader = response.body.getReader();
+	return createStreamReader(reader);
 }
