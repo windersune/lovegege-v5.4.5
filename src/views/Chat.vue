@@ -287,93 +287,92 @@ const startNewChat = () => {
 let currentSSEConnection = null;
 
 // 发送消息
-const sendMessage = async (text, image) => {
-  if (!text.trim() && !image) return;
+// 在 Chat.vue 的 <script setup> 或 methods 中
+
+// ... 您的 ref 或 data 定义，如：
+// const messages = ref([]);
+// const userInput = ref('');
+// ...
+
+async function sendMessage() {
+  if (loading.value || (!userInput.value && !uploadedImage.value)) {
+    return;
+  }
   
+  loading.value = true;
+  
+  // 1. 准备用户消息对象，但先不改变它的结构
+  const userMessageForUI = {
+    role: 'user',
+    content: userInput.value, // 初始 content 是字符串
+    image: uploadedImage.value // 图片数据也先独立存在
+  };
+  
+  // 2. 将这个“UI友好”的消息对象添加到 messages 数组中，用于立即显示
+  messages.value.push(userMessageForUI);
+
+  // 3. 为了调用API，我们从 messages 数组创建一份历史记录
+  //    我们发送除最后一条（也就是我们刚添加的）之外的所有历史
+  const historyForApi = messages.value.slice(0, -1);
+  
+  // 4. 创建一个空的、临时的助手消息，用于显示"思考中"的效果
+  const assistantMessagePlaceholder = {
+    role: 'assistant',
+    content: ''
+  };
+  messages.value.push(assistantMessagePlaceholder);
+
+  // 清空输入框和待上传图片
+  const currentMessage = userInput.value;
+  const currentImage = uploadedImage.value;
+  userInput.value = '';
+  uploadedImage.value = null;
+
   try {
-    // 如果存在当前SSE连接，先取消它
-    if (currentSSEConnection) {
-      currentSSEConnection.abort();
-      currentSSEConnection = null;
-    }
-
-    // 【修改点 1】：将当前上传的 File 对象转换为 Base64 Data URL
-    const currentImageBase64 = image ? await fileToBase64(image) : null;
-    
-    // 添加用户消息到聊天记录
-    chatStore.addMessage({
-      id: Date.now(),
-      content: text,
-      sender: 'user',
-      timestamp: new Date().toISOString(),
-      image: currentImageBase64     // <-- 直接使用从子组件传来的 imageBase64
-    });
-    
-    // 设置加载状态
-    chatStore.setLoading(true);
-    chatStore.setError(null);
-    
-    // 添加AI消息占位符
-    chatStore.addMessage({
-      id: Date.now() + 1,
-      content: '',
-      sender: 'ai',
-      timestamp: new Date().toISOString()
-    });
-    
-    // 获取历史消息（除了最后的空白助手消息）
-    const historyMessages = messages.value
-      .slice(0, -1)
-      .filter(msg => msg.sender === 'user' || (msg.sender === 'ai' && msg.content.trim() !== ''))
-      .map(msg => ({
-        role: msg.sender === 'user' ? 'user' : 'assistant',
-        content: msg.content,
-        image: msg.image // <-- msg.image 现在预期已经是 Base64 Data URL
-      }));
-    
-    console.log('发送消息 - 历史记录长度:', historyMessages.length);
-    console.log('发送消息 - 最终历史记录:', historyMessages); // 调试用
-
-    
-    // 发送消息到API
-    currentSSEConnection = handleSSE(
-      '/api/chat',
-      { 
-        assistant_type: assistant.value.id, 
-        message: text, 
-        image: currentImageBase64, // <-- 使用处理好的当前图片 Base64
-        history: historyMessages
+    handleSSE(
+      'your_sse_endpoint',
+      {
+        // 传递当前消息的原始数据
+        assistant_type: assistantId.value,
+        message: currentMessage,
+        image: currentImage,
+        // 传递我们准备好的、未被破坏的历史
+        history: historyForApi 
       },
+      // onMessage 回调：实时更新最后一条消息的内容
       (chunk) => {
-        // 如果是重连消息，添加到现有消息后面，但使用特殊样式标记
-        if (typeof chunk === 'string' && chunk.includes('[正在重新连接...')) {
-          chatStore.updateLastAiMessage((prev) => 
-            prev + `<span class="text-yellow-500 text-xs">${chunk}</span><br/>`
-          );
-        } else {
-          chatStore.updateLastAiMessage((prev) => prev + chunk);
-        }
+        messages.value[messages.value.length - 1].content += chunk;
       },
+      // onComplete 回调：对话完成
       () => {
-        // 完成
-        chatStore.setLoading(false);
-        currentSSEConnection = null;
+        loading.value = false;
+        
+        // 【核心修正点】
+        // 当流结束时，助手消息的内容已经完整了。
+        // 我们唯一需要做的，是确保用户消息的最终结构是正确的。
+        // 我们找到刚才添加的用户消息（现在是倒数第二条），并修正它的 content 结构。
+        const finalUserMessage = messages.value[messages.value.length - 2];
+        if (finalUserMessage.image) {
+          finalUserMessage.content = [
+            { type: 'text', text: finalUserMessage.content },
+            { type: 'image_url', image_url: { url: finalUserMessage.image } }
+          ];
+          // delete finalUserMessage.image; // 可选：删除临时的image属性，保持数据干净
+        }
+        // 至关重要：我们没有对 history.map() 进行任何操作，
+        // 从而完整地保留了所有历史消息的原始结构！
       },
+      // onError 回调
       (error) => {
-        // 错误处理
-        console.error('SSE错误:', error);
-        chatStore.setError('很抱歉，服务暂时遇到问题，请稍后再试~');
-        chatStore.setLoading(false);
-        currentSSEConnection = null;
+        // ... 错误处理 ...
+        loading.value = false;
       }
     );
-  } catch (error) {
-    console.error('发送消息错误:', error);
-    chatStore.setError('很抱歉，服务暂时遇到问题，请稍后再试~');
-    chatStore.setLoading(false);
-    currentSSEConnection = null;
+  } catch (err) {
+    // ... 异常处理 ...
+    loading.value = false;
   }
-};
+}
 
 // 重试最后一条消息
 const retryLastMessage = () => {
