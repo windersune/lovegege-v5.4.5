@@ -38,18 +38,18 @@ export const useAssistantStore = defineStore('assistant', {
       },
       {
         id: '5',
-        name: 'Gemini大美女（wifi版）',
-        description: '我只能在公共网络/wifi情况下使用，移动网络不行哦',
-        avatar: '/images/backup-assistant.png',
-        available: false,
-        supportsImage: false
-      },
-      {
-        id: '6',
         name: '老师傅',
         description: '继往圣之绝，开万世之太平。',
         avatar: '/images/7.12-6.jpg',
         available: true,
+        supportsImage: false
+      },
+      {
+        id: '6',
+        name: '待配置',
+        description: '待配置',
+        avatar: '/images/backup-assistant.png',
+        available: false,
         supportsImage: false
       }
     ]
