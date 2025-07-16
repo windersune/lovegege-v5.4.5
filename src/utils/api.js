@@ -51,21 +51,33 @@ export async function sendMessage(assistantId, message, image = null, history = 
       });
     }
 
-    // 如果有图片，添加图片信息到最后一条用户消息
-// 修正后的代码
+    // 如果有图片，则改造最后一条用户消息以符合 gpt-4o 的多模态格式
     if (image && messages.length > 0) {
-      // 直接使用传入的 image 变量，因为它已经是 Base64 格式的 URL
-      const imageBase64 = image; 
-      
-      // 找到最后一条用户消息并附加图片
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === 'user') {
-          // 确保 messages[i] 存在并且是一个对象
-          if (messages[i]) {
-            messages[i].image = imageBase64;
+      // 获取刚刚添加的最后一条消息
+      const lastMessage = messages[messages.length - 1];
+    
+      // 确保我们正在修改的是刚刚添加的用户消息
+      if (lastMessage && lastMessage.role === 'user') {
+        
+        // 取出原始的文本内容 (如果用户只传图没打字，则为空字符串)
+        const textContent = lastMessage.content || '';
+    
+        // 关键：将 content 字段重构为数组格式
+        lastMessage.content = [
+          // 第一部分：文本
+          {
+            type: 'text',
+            text: textContent
+          },
+          // 第二部分：图片
+          {
+            type: 'image_url',
+            image_url: {
+              // 'image' 变量已经是我们需要的 Base64 格式的 URL
+              url: image 
+            }
           }
-          break;
-        }
+        ];
       }
     }
 
