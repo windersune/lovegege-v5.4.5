@@ -146,7 +146,10 @@ const assistant = computed(() =>
 
 // 从store获取消息、加载状态和错误信息
 const messages = computed(() => chatStore.messages);
-const loading = computed(() => chatStore.loading);
+const loading = computed({
+    get: () => chatStore.loading,
+    set: (value) => setLoading(value) // 允许双向绑定
+});
 const error = computed(() => chatStore.error);
 
 // 为不同助手提供的问题建议 - 减少计算量，使用普通变量而非计算属性
@@ -294,37 +297,39 @@ let currentSSEConnection = null;
 // const userInput = ref('');
 // ...
 
-async function sendMessage() {
-  if (loading.value || (!userInput.value && !uploadedImage.value)) {
+// Chat.vue - <script setup>
+
+async function sendMessage(text, imageFile) { // 函数参数也稍微调整一下，更清晰
+  const messageText = typeof text === 'string' ? text : userInput.value;
+  const image = imageFile || uploadedImage.value;
+  
+  if (loading.value || (!messageText && !image)) {
     return;
   }
   
-  loading.value = true;
-  
-  // 1. 准备用户消息对象，但先不改变它的结构
-  const userMessageForUI = {
+  // 使用 setLoading action
+  setLoading(true);
+  setError(null);
+
+  // 1. 创建用户消息对象
+  const userMessage = {
     role: 'user',
-    content: userInput.value, // 初始 content 是字符串
-    image: uploadedImage.value // 图片数据也先独立存在
+    content: messageText,
+    // 关键：如果上传了图片，先将其转为Base64
+    image: image ? await fileToBase64(image) : null 
   };
   
-  // 2. 将这个“UI友好”的消息对象添加到 messages 数组中，用于立即显示
-  messages.value.push(userMessageForUI);
+  // 2. 【核心修正】使用 addMessage action 来添加消息
+  addMessage(userMessage);
 
-  // 3. 为了调用API，我们从 messages 数组创建一份历史记录
-  //    我们发送除最后一条（也就是我们刚添加的）之外的所有历史
+  // 3. 准备API历史记录：发送除最后一条之外的所有历史
   const historyForApi = messages.value.slice(0, -1);
   
-  // 4. 创建一个空的、临时的助手消息，用于显示"思考中"的效果
-  const assistantMessagePlaceholder = {
-    role: 'assistant',
-    content: ''
-  };
-  messages.value.push(assistantMessagePlaceholder);
+  // 4. 【核心修正】用 action 添加临时的助手消息
+  const assistantMessagePlaceholder = { role: 'assistant', content: '' };
+  addMessage(assistantMessagePlaceholder);
 
-  // 清空输入框和待上传图片
-  const currentMessage = userInput.value;
-  const currentImage = uploadedImage.value;
+  // 清空输入
   userInput.value = '';
   uploadedImage.value = null;
 
@@ -332,45 +337,43 @@ async function sendMessage() {
     handleSSE(
       'your_sse_endpoint',
       {
-        // 传递当前消息的原始数据
         assistant_type: assistantId.value,
-        message: currentMessage,
-        image: currentImage,
-        // 传递我们准备好的、未被破坏的历史
+        message: userMessage.content,
+        // 直接传递已经转好的 Base64 图片
+        image: userMessage.image, 
         history: historyForApi 
       },
-      // onMessage 回调：实时更新最后一条消息的内容
       (chunk) => {
-        messages.value[messages.value.length - 1].content += chunk;
+        // 更新最后一条消息（助手消息）的内容
+        const lastMsg = messages.value[messages.value.length - 1];
+        if(lastMsg) lastMsg.content += chunk;
       },
-      // onComplete 回调：对话完成
       () => {
-        loading.value = false;
+        setLoading(false);
         
-        // 【核心修正点】
-        // 当流结束时，助手消息的内容已经完整了。
-        // 我们唯一需要做的，是确保用户消息的最终结构是正确的。
-        // 我们找到刚才添加的用户消息（现在是倒数第二条），并修正它的 content 结构。
-        const finalUserMessage = messages.value[messages.value.length - 2];
-        if (finalUserMessage.image) {
-          finalUserMessage.content = [
-            { type: 'text', text: finalUserMessage.content },
-            { type: 'image_url', image_url: { url: finalUserMessage.image } }
-          ];
-          // delete finalUserMessage.image; // 可选：删除临时的image属性，保持数据干净
+        // 【重要修正】对话完成后，修正用户消息的最终结构
+        // 这一步也需要通过 action 来完成，或者直接修改 store 的 state
+        const userMessageInStore = messages.value[messages.value.length - 2];
+        if (userMessageInStore && userMessageInStore.image) {
+           // chatStore.formatLastUserMessageAsMultimodal(); // 推荐为此也创建一个action
+           // 或者直接修改（如果你的store允许）
+           userMessageInStore.content = [
+            { type: 'text', text: userMessageInStore.content },
+            { type: 'image_url', image_url: { url: userMessageInStore.image } }
+           ];
+           delete userMessageInStore.image;
         }
-        // 至关重要：我们没有对 history.map() 进行任何操作，
-        // 从而完整地保留了所有历史消息的原始结构！
       },
-      // onError 回调
-      (error) => {
-        // ... 错误处理 ...
-        loading.value = false;
+      (err) => {
+        setError(err.message || '发生错误');
+        setLoading(false);
+        // 移除临时的助手消息
+        messages.value.pop();
       }
     );
   } catch (err) {
-    // ... 异常处理 ...
-    loading.value = false;
+    setError(err.message || '发生未知错误');
+    setLoading(false);
   }
 }
 
