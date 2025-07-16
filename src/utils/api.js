@@ -21,6 +21,7 @@ const assistantModules = {
  * @param {Array} history - 消息历史记录
  * @returns {Promise} - 返回Promise对象
  */
+// api.js (最终修正版)
 export async function sendMessage(assistantId, message, image = null, history = []) {
   try {
     // 获取对应助手的消息处理模块
@@ -32,53 +33,40 @@ export async function sendMessage(assistantId, message, image = null, history = 
     // 动态导入对应的助手模块
     const assistantModule = await getAssistantModule();
 
-    // 准备消息格式 - 包含历史记录
+    // 准备消息格式 - 直接使用传入的历史记录
+    // 此时，history应该已经包含了用户当前的文本消息
     const messages = [...history];
-    
-    // 添加当前消息
-    if (message) {
-      messages.push({
-        role: 'user',
-        content: message
-      });
-    }
-    
-    // 确保消息非空
-    if (messages.length === 0) {
-      messages.push({
-        role: 'user',
-        content: '你好'
-      });
-    }
 
-    // 如果有图片，则改造最后一条用户消息以符合 gpt-4o 的多模态格式
+    // 如果有图片，我们改造最后一条消息，而不是添加新消息
     if (image && messages.length > 0) {
-      // 获取刚刚添加的最后一条消息
       const lastMessage = messages[messages.length - 1];
-    
-      // 确保我们正在修改的是刚刚添加的用户消息
+
+      // 确保我们正在修改的是最后一条用户消息
       if (lastMessage && lastMessage.role === 'user') {
         
-        // 取出原始的文本内容 (如果用户只传图没打字，则为空字符串)
-        const textContent = lastMessage.content || '';
-    
-        // 关键：将 content 字段重构为数组格式
+        // 将 content 字段重构为符合 gpt-4o 的多模态数组格式
         lastMessage.content = [
-          // 第一部分：文本
           {
             type: 'text',
-            text: textContent
+            text: lastMessage.content // 使用已有的文本内容
           },
-          // 第二部分：图片
           {
             type: 'image_url',
             image_url: {
-              // 'image' 变量已经是我们需要的 Base64 格式的 URL
-              url: image 
+              url: image // 'image' 已经是 base64 字符串
             }
           }
         ];
       }
+    }
+
+    // 安全检查：如果（因为某种原因）消息历史是空的，
+    // 我们才根据 message 参数添加一条新消息。
+    if (messages.length === 0 && message) {
+        messages.push({
+            role: 'user',
+            content: message
+        });
     }
 
     // 创建一个可读流
@@ -102,8 +90,9 @@ export async function sendMessage(assistantId, message, image = null, history = 
       try {
         console.log('准备发送消息到助手:', { assistantId, msgCount: messages.length });
         
+        // 打印最终要发送的数据包，用于最终确认
         console.log('发送给助手模块的最终 messages 结构:', JSON.stringify(messages, null, 2));
-        
+
         // 直接调用真实API
         const stream = await assistantModule.getResponse(messages);
         
@@ -133,7 +122,6 @@ export async function sendMessage(assistantId, message, image = null, history = 
     throw error;
   }
 }
-
 /**
  * 上传图片
  * @param {File} file - 图片文件
