@@ -123,7 +123,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, onBeforeMou
 import { useRoute, useRouter } from 'vue-router';
 import { useAssistantStore } from '../stores/assistantStore';
 import { useChatStore } from '../stores/chatStore';
-import { fileToBase64, sendMessage as apiSendMessage } from '../utils/api';
+import { fileToBase64 } from '../utils/api'; // apiSendMessage is not directly used here
 import { handleSSE } from '../utils/sse';
 
 import ChatHeader from '../components/chat/ChatHeader.vue';
@@ -137,11 +137,14 @@ const assistantStore = useAssistantStore();
 const chatStore = useChatStore();
 
 const messageContainer = ref(null);
-const assistant = computed(() => assistantStore.getAssistantById(route.params.assistantId));
+
+const assistant = computed(() => 
+  assistantStore.getAssistantById(route.params.assistantId)
+);
+
 const messages = computed(() => chatStore.messages);
 const loading = computed(() => chatStore.loading);
 const error = computed(() => chatStore.error);
-let currentSSEConnection = null;
 
 const getSuggestions = () => {
   if (!assistant.value) return [];
@@ -156,7 +159,7 @@ const getSuggestions = () => {
 const suggestions = computed(getSuggestions);
 
 onBeforeMount(() => {
-  if (assistant.value && assistant.value.avatar) {
+  if (assistant.value?.avatar) {
     const img = new Image();
     img.src = assistant.value.avatar;
   }
@@ -186,6 +189,8 @@ onMounted(() => {
   });
 });
 
+let currentSSEConnection = null;
+
 const goBack = () => {
   if (currentSSEConnection) currentSSEConnection.abort();
   chatStore.clearMessages();
@@ -201,14 +206,23 @@ const startNewChat = () => {
   chatStore.setLoading(false);
 };
 
+/**
+ * 发送消息的核心函数 (最终修复版)
+ * @param {string} text - 用户输入的文本
+ * @param {File|string|null} image - 新上传的图片文件(File)或重试时的base64字符串
+ * @param {boolean} isRetry - 标记这是否是一次重试操作
+ */
 const sendMessage = async (text, image, isRetry = false) => {
-  if (!text && !image) return;
+  // 允许只发送图片，但文本必须是字符串
+  const messageText = text || '';
+  if (!messageText.trim() && !image) return;
 
   try {
     if (currentSSEConnection) {
       currentSSEConnection.abort();
     }
     
+    // 1. 【顺序修正】: 先根据当前状态构建历史记录
     const historyEndIndex = isRetry ? -1 : messages.value.length;
     const historyForApi = messages.value
       .slice(0, historyEndIndex)
@@ -218,12 +232,15 @@ const sendMessage = async (text, image, isRetry = false) => {
         image: msg.image || null
       }));
 
-    const currentImageBase64 = await fileToBase64(image);
+    // 2. 【唯一转换点】: 只在这里将File对象转为Base64
+    //    如果 image 是 File/Blob，转换它；如果是 base64 字符串或 null，直接使用。
+    const currentImageBase64 = image instanceof Blob ? await fileToBase64(image) : image;
     
+    // 3. 【UI更新】: 如果不是重试，才将新消息添加到UI
     if (!isRetry) {
       chatStore.addMessage({
         id: Date.now(),
-        content: text,
+        content: messageText,
         sender: 'user',
         timestamp: new Date().toISOString(),
         image: currentImageBase64
@@ -233,6 +250,7 @@ const sendMessage = async (text, image, isRetry = false) => {
     chatStore.setLoading(true);
     chatStore.setError(null);
 
+    // 4. 添加AI消息占位符
     chatStore.addMessage({
       id: Date.now() + 1,
       content: '',
@@ -240,23 +258,28 @@ const sendMessage = async (text, image, isRetry = false) => {
       timestamp: new Date().toISOString()
     });
 
-    const streamFetcher = () => apiSendMessage(
-      assistant.value.id,
-      text,
-      currentImageBase64,
-      historyForApi
-    );
-
+    // 5. 调用SSE处理
     currentSSEConnection = handleSSE(
-      streamFetcher,
+      '/api/chat',
+      { 
+        assistant_type: assistant.value.id, 
+        message: messageText, 
+        image: currentImageBase64, // 这里传递的是转换好的base64或null
+        history: historyForApi
+      },
       (chunk) => {
-        chatStore.updateLastAiMessage((prev) => prev + chunk);
+        if (typeof chunk === 'string' && chunk.includes('[正在重新连接...')) {
+          chatStore.updateLastAiMessage((prev) => prev + `<span class="text-yellow-500 text-xs">${chunk}</span><br/>`);
+        } else {
+          chatStore.updateLastAiMessage((prev) => prev + chunk);
+        }
       },
       () => {
         chatStore.setLoading(false);
         currentSSEConnection = null;
       },
       (err) => {
+        console.error('来自SSE的错误回调:', err);
         chatStore.setError('服务暂时遇到问题，请重试。');
         chatStore.setLoading(false);
         currentSSEConnection = null;
@@ -264,20 +287,27 @@ const sendMessage = async (text, image, isRetry = false) => {
     );
 
   } catch (err) {
+    console.error('前端发送逻辑错误:', err);
     chatStore.setError(`发送失败: ${err.message}`);
     chatStore.setLoading(false);
   }
 };
 
+/**
+ * 重试最后一条消息 (已修复)
+ */
 const retryLastMessage = () => {
+  // 从UI上移除失败的AI消息占位符
   if (messages.value.length > 0 && messages.value[messages.value.length - 1].sender === 'ai') {
     chatStore.removeLastMessage();
   }
   chatStore.setError(null);
 
+  // 找到最后一条用户消息
   const lastUserMessage = [...messages.value].reverse().find(m => m.sender === 'user');
   
   if (lastUserMessage) {
+    // 【关键修复点】: 调用核心函数，传递图片数据(lastUserMessage.image)并标记为重试
     sendMessage(lastUserMessage.content, lastUserMessage.image, true);
   }
 };
@@ -285,6 +315,7 @@ const retryLastMessage = () => {
 onBeforeUnmount(() => {
   if (currentSSEConnection) {
     currentSSEConnection.abort();
+    currentSSEConnection = null;
   }
 });
 </script>
