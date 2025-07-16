@@ -1,7 +1,7 @@
 // 直接复制dify.py中的核心逻辑到JavaScript
 
 // --- 配置 ---
-const API_KEY = "app-uS1KADY2na616u3T4OIgJZaD"
+const API_KEY = "app-tNfG1uJfELDK8CWUb0fanZA5"
 const API_BASE_URL = "https://api.dify.ai/v1"
 // 修改API端点为对话型应用接口
 const CHAT_ENDPOINT = `${API_BASE_URL}/chat-messages`
