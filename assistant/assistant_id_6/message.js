@@ -1,4 +1,4 @@
-import { loadConfig } from './config.js'
+import { runDifyWorkflowStream } from './config.js'
 
 // 一个休眠函数，让程序等待一段时间（单位 ms）
 function sleep(ms) {
@@ -11,82 +11,124 @@ export async function getMockResponse() {
 	return '这是一条模拟的回复'
 }
 
-// 创建一个自定义的流式读取器，用于处理SSE流
-async function* createStreamReader(reader) {
-	const decoder = new TextDecoder();
-	let buffer = '';
-	
-	while (true) {
-		const { value, done } = await reader.read();
-		if (done) break;
-		
-		buffer += decoder.decode(value, { stream: true });
-		const lines = buffer.split('\n');
-		buffer = lines.pop() || '';
-		
-		for (const line of lines) {
-			const trimmedLine = line.trim();
-			if (!trimmedLine || trimmedLine === 'data: [DONE]') continue;
-			
-			if (trimmedLine.startsWith('data: ')) {
-				try {
-					const json = JSON.parse(trimmedLine.slice(6));
-					yield json;
-				} catch (e) {
-					console.error('解析SSE数据出错:', e);
-				}
-			}
+// 维护当前对话ID，每个会话中保持一致
+let currentConversationId = null;
+
+// 主要的响应获取函数
+export async function getResponse(messages) {
+	// 提取用户最后一条消息内容
+	let userMessage = '';
+	for (let i = messages.length - 1; i >= 0; i--) {
+		if (messages[i].role === 'user') {
+			userMessage = messages[i].content;
+			break;
 		}
 	}
-}
-
-export async function getResponse(messages) {
-	// 由于配置信息可能会发生变化，因此每次都需要重新加载配置信息
-	const config = loadConfig()
-
-	// 梳理一下这里收到的 messages 数组里有什么内容：
-	// 1. 前面 0 轮或多轮的对话（每轮对话包含一条用户的 + 一条机器人的）
-	// 2. 用户本次发送的消息
-	// 3. 我们提前为机器人构造的占位消息
-
-	// 最后一条占位消息不应该发送给 API，去掉它
-	if (messages.length > 0) {
-		messages = messages.slice(0, -1)
-	}
-	// 历史消息记录最多只保留最后 5 轮，加上用户本次发送的消息
-	// 因此最终发送给 API 的消息最多取最后 11 条
-	if (messages.length > 11) {
-		messages = messages.slice(-11)
-	}
-
-	// 构建请求体
-	const requestBody = {
-		messages: [
-			{ role: 'system', content: config.systemPrompt },
-			...messages,
-		],
-		model: config.modelName,
-		stream: true,
+	
+	console.log(`[MESSAGE] 开始处理用户消息: ${userMessage.substring(0, 50)}...`);
+	console.log(`[MESSAGE] 当前对话ID: ${currentConversationId}`);
+	
+	// 创建一个异步迭代器来处理流式响应
+	const streamAsync = async function* () {
+		try {
+			// 收集响应内容的队列
+			const responseChunks = [];
+			let responseComplete = false;
+			let responseError = null;
+			
+			// 创建一个Promise来等待响应完成
+			const responsePromise = new Promise((resolve, reject) => {
+				// 调用Dify工作流API，使用直接的回调处理方式
+				runDifyWorkflowStream(
+					userMessage,           // 用户当前消息
+					currentConversationId, // 当前对话ID
+					(data, chunk) => {     // 数据回调
+						if (chunk) {
+							// 接收到内容块，添加到队列
+							responseChunks.push({
+								choices: [
+									{
+										delta: {
+											content: chunk
+										}
+									}
+								]
+							});
+						}
+					},
+					() => {  // 完成回调
+						console.log(`[MESSAGE] 工作流响应完成`);
+						responseComplete = true;
+						resolve();
+					},
+					(error) => {  // 错误回调
+						console.error(`[MESSAGE] 工作流错误: ${error.message}`);
+						responseError = error;
+						responseComplete = true;
+						reject(error);
+					}
+				).then(result => {
+					// 处理结果，保存会话ID
+					if (result && result.conversationId) {
+						console.log(`[MESSAGE] 新的会话ID: ${result.conversationId}`);
+						currentConversationId = result.conversationId;
+					}
+					responseComplete = true;
+					resolve();
+				}).catch(error => {
+					console.error(`[MESSAGE] 请求异常: ${error.message}`);
+					responseError = error;
+					responseComplete = true;
+					reject(error);
+				});
+			});
+			
+			// 使用一个监控函数同时等待响应和检查队列
+			(async () => {
+				try {
+					await responsePromise;
+				} catch (e) {
+					// 错误已在回调中处理
+				}
+			})();
+			
+			// 处理所有响应块
+			let index = 0;
+			while (!responseComplete || index < responseChunks.length) {
+				if (index < responseChunks.length) {
+					// 有可用的响应块，处理它
+					yield responseChunks[index++];
+				} else {
+					// 等待更多响应或完成
+					await sleep(10);
+				}
+			}
+			
+			// 如果有错误，yield错误消息
+			if (responseError) {
+				yield {
+					choices: [
+						{
+							delta: {
+								content: `处理过程中出现错误: ${responseError.message}`
+							}
+						}
+					]
+				};
+			}
+		} catch (error) {
+			console.error(`[MESSAGE] 处理异常: ${error.message}`);
+			yield {
+				choices: [
+					{
+						delta: {
+							content: `处理过程中出现错误: ${error.message}`
+						}
+					}
+				]
+			};
+		}
 	};
-
-	// 使用fetch API直接发送请求
-	const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Bearer ${config.apiKey}`,
-			// 关键：添加跨域头信息
-			'X-Requested-With': 'XMLHttpRequest'
-		},
-		body: JSON.stringify(requestBody),
-	});
-
-	if (!response.ok) {
-		const errorData = await response.text();
-		throw new Error(`API请求失败: ${response.status} ${errorData}`);
-	}
-
-	// 处理流式响应
-	const reader = response.body.getReader();
-	return createStreamReader(reader);
+	
+	return streamAsync();
 }
