@@ -102,6 +102,8 @@ export async function sendMessage(assistantId, message, image = null, history = 
       try {
         console.log('准备发送消息到助手:', { assistantId, msgCount: messages.length });
         
+        console.log('发送给助手模块的最终 messages 结构:', JSON.stringify(messages, null, 2));
+        
         // 直接调用真实API
         const stream = await assistantModule.getResponse(messages);
         
