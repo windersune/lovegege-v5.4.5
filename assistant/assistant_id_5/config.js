@@ -1,28 +1,22 @@
-// --- START OF MODIFIED config.js ---
-
 import * as storage from '@/utils/storage.js'
 
 // 保存在 localStorage 中的配置信息的 key
-const STORAGE_KEY = 'huggingface_config' // 使用新的key以避免与旧配置冲突
+const STORAGE_KEY = 'config'
 
 // ===================================================================
 //                        【核心修改】
 // ===================================================================
 
-// 1. 您的 Hugging Face Space 的 API 地址
-//    格式通常是 https://<用户名>-<仓库名>.hf.space
-//    !! 注意：这里不包含 /run/chat 后缀
-const HUGGINGFACE_SPACE_URL = 'https://badanwang-teacher-basic-qwen3-0-6b.hf.space'
+// 1. 您的 Hugging Face Space 的 API 终端地址
+//    !!! 这里的 /chat 对应您 predict 方法的 api_name !!!
+const HUGGINGFACE_API_URL = 'https://badanwang-teacher-basic-qwen3-0-6b.hf.space/run/chat'
 
-// 2. 您在Gradio中定义的api_name
-const API_NAME = '/chat'
-
-// 3. 为所有调试参数设置默认值，以匹配Gradio示例
+// 2. [修改] 为所有调试参数设置默认值以适配您的Hugging Face模型
 const DEFAULT_CONFIG = {
-	system_message: 'You are a helpful AI assistant.', // 键名从 systemPrompt 改为 system_message
-	temperature: 0.7,      // 温度
-	top_p: 0.95,           // Top P
-	max_tokens: 512,       // 最大Token数
+	system_message: 'You are a helpful and friendly AI assistant.', // 对应 system_message
+	temperature: 0.1,      // 温度：控制随机性
+	top_p: 0.01,           // Top P：控制核心词汇范围
+	max_tokens: 2048,      // 最大Token数：限制单次回复的长度
 }
 
 // ===================================================================
@@ -34,10 +28,10 @@ export function loadConfig() {
 	
 	return {
 		// 固定的基础信息
-		// 将基础URL和API名称组合成完整的请求地址
-		apiURL: `${HUGGINGFACE_SPACE_URL}/run${API_NAME}`,
-		
-		// 将默认配置与用户保存的配置合并
+		baseURL: HUGGINGFACE_API_URL,
+		apiKey: '', // Hugging Face Spaces 通常不需要 API Key
+
+		// [修改] 将默认配置与用户保存的配置合并
 		// 用户保存的值会覆盖默认值
 		...DEFAULT_CONFIG,
 		...savedConfig
@@ -46,7 +40,7 @@ export function loadConfig() {
 
 // 保存配置信息到 localStorage
 export function saveConfig(config) {
-	// 创建一个只包含可调参数的对象进行保存
+	// [修改] 创建一个只包含可调参数的对象进行保存
 	const configToSave = {
 		system_message: config.system_message,
 		temperature: config.temperature,
@@ -60,5 +54,3 @@ export function saveConfig(config) {
 export function hasValidConfig() {
 	return true
 }
-
-// --- END OF MODIFIED config.js ---
