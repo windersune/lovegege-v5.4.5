@@ -8,10 +8,10 @@ const HUGGINGFACE_API_URL = 'https://badanwang-teacher-basic-qwen3-0-6b.hf.space
 
 // 2. 为所有调试参数设置默认值
 const DEFAULT_CONFIG = {
-	system_message: 'You are a helpful and friendly AI assistant.',
-	max_tokens: 2048,
-	temperature: 0.1,
-	top_p: 0.01,
+	system_message: 'You are a helpful AI assistant.', // 对应 app.py 中的 system_message
+	max_tokens: 2048,      // 对应 app.py 中的 max_tokens
+	temperature: 0.1,      // 对应 app.py 中的 temperature
+	top_p: 0.01,           // 对应 app.py 中的 top_p
 }
 
 // 加载配置信息
