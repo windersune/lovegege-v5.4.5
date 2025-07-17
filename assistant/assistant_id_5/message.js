@@ -12,46 +12,49 @@ export async function getResponse(messages) {
 
 	// ==================================================================
 	//                        【终极核心修正】
-	//   构建一个普通的、带命名参数的 JSON 对象，与 app.py 中的函数签名匹配
-	//   不再使用 {"data": [...]} 的格式
+	//   构建一个符合 Gradio 底层协议的、包含 fn_index 和 data 的请求体
 	// ==================================================================
 	const requestBody = {
-		message: lastUserMessage.content,     // 对应 fn=respond_for_api 的 "message" 参数
-		system_message: config.system_message, // 对应 "system_message" 参数
-		max_tokens: Number(config.max_tokens), // 对应 "max_tokens" 参数
-		temperature: Number(config.temperature),// 对应 "temperature" 参数
-		top_p: Number(config.top_p),          // 对应 "top_p" 参数
+        // 在您当前的 app.py 中，api_interface 是第二个被定义的，
+        // 它的函数在内部的索引通常是 1。
+        // （第一个是 ui_interface 的函数，索引为 0）
+		fn_index: 1, 
+		data: [
+			lastUserMessage.content,
+			config.system_message,
+			Number(config.max_tokens),
+			Number(config.temperature),
+			Number(config.top_p),
+		]
 	};
 
 	try {
 		const response = await fetch(config.baseURL, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(requestBody), // 直接发送这个对象
+			body: JSON.stringify(requestBody),
 		});
 
 		const responseText = await response.text();
 
 		if (!response.ok) {
-			// 即使请求失败，也打印出服务器返回的内容，方便调试
 			console.error("服务器返回错误:", responseText);
 			throw new Error(`API请求失败: ${response.status} ${responseText}`);
 		}
 		
 		const jsonResponse = JSON.parse(responseText);
-
-		// 根据 Gradio 的标准，返回的数据在 .data 字段中，它是一个数组
+        
+        // 返回的数据在 .data 字段中，它是一个数组
 		const outputContent = jsonResponse.data[0];
 
-		// 为了适配您前端的流式UI，我们模拟一个只包含最终结果的“流”
+		// 模拟流式返回给UI
 		async function* createSingleResponse() {
 			yield { content: outputContent };
 		}
-
 		return createSingleResponse();
 
 	} catch (error) {
 		console.error("在 getResponse 函数中捕获到严重错误:", error);
-		throw error; // 将错误继续向上抛出，以便UI可以捕获并显示
+		throw error;
 	}
 }
