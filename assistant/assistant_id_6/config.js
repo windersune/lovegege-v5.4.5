@@ -1,7 +1,7 @@
 // 直接复制dify.py中的核心逻辑到JavaScript
 
 // --- 配置 ---
-const API_KEY = "app-tNfG1uJfELDK8CWUb0fanZA5"
+const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t"
 const API_BASE_URL = "https://api.dify.ai/v1"
 const WORKFLOW_ENDPOINT = `${API_BASE_URL}/workflows/run`
 const USER_ID = "my_test_user_workflow_002"
