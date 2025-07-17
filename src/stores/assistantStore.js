@@ -6,7 +6,7 @@ export const useAssistantStore = defineStore('assistant', {
       {
         id: '1',
         name: 'GPT阿布',
-        description: 'AI界的海盗王，GPT出身，我一出马，万事可成！',
+        description: 'AI界的海盗王，gpt-4.0出身，我一出马，万事可成！',
         avatar: '/images/7.12-1.jpg',
         available: true,
         supportsImage: true
@@ -14,7 +14,7 @@ export const useAssistantStore = defineStore('assistant', {
       {
         id: '2',
         name: 'GPT女皇',
-        description: '出身于GPT，娇弱身姿压制GPT阿布。',
+        description: '出身于gpt-4.1-mini，娇弱身姿压制GPT阿布。',
         avatar: '/images/7.12-2.jpg',
         available: true,
         supportsImage: true
@@ -31,7 +31,7 @@ export const useAssistantStore = defineStore('assistant', {
       {
         id: '4',
         name: 'GPT小孩哥',
-        description: '我只能在公共网络/wifi情况下使用，移动网络不行哦',
+        description: '出身于gpt-4.1，我是小小孩子哦',
         avatar: '/images/7.12-4.jpg',
         available: true,
         supportsImage: true
