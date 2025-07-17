@@ -2,53 +2,64 @@ import { loadConfig } from './config.js'
 
 // [最终正确版本]
 export async function getResponse(messages) {
-	// 加载包含所有参数的完整配置
+	// 1. 加载配置
 	const config = loadConfig();
+	console.log("【步骤1】加载的配置:", config);
 
-	// 获取最新的用户消息
+	// 2. 获取最新用户消息
 	const lastUserMessage = messages.filter(m => m.role === 'user').pop();
 	if (!lastUserMessage) {
 		throw new Error("没有找到可以发送的用户消息。");
 	}
+	console.log("【步骤2】获取的用户消息:", lastUserMessage.content);
 
 	// ==================================================================
 	//                        【最核心的修改】
-	//   构建一个带参数名的 JSON 对象，而不是之前的 data 数组
-	//   这与您提供的最新官方示例完全匹配
+	//   构建一个符合 Gradio 底层HTTP标准的、包含 data 数组的请求体
+	//   参数的顺序必须和官网示例函数定义的顺序完全一致
 	// ==================================================================
 	const requestBody = {
-		message: lastUserMessage.content,
-		system_message: config.system_message,
-		max_tokens: Number(config.max_tokens),
-		temperature: Number(config.temperature),
-		top_p: Number(config.top_p),
+		data: [
+			lastUserMessage.content,     // 对应 "message"
+			config.system_message,       // 对应 "system_message"
+			Number(config.max_tokens),   // 对应 "max_tokens"
+			Number(config.temperature),  // 对应 "temperature"
+			Number(config.top_p),        // 对应 "top_p"
+		]
 	};
+	console.log("【步骤3】构建的最终请求体 (Request Body):", JSON.stringify(requestBody));
 
-	const response = await fetch(config.baseURL, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-		},
-		body: JSON.stringify(requestBody), // 直接发送这个对象
-	});
+	try {
+		const response = await fetch(config.baseURL, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(requestBody),
+		});
 
-	if (!response.ok) {
-		const errorText = await response.text();
-		console.error("API 错误响应:", errorText);
-		throw new Error(`API请求失败: ${response.status} ${errorText}`);
+		console.log("【步骤4】收到的原始响应 (Response):", response);
+		
+		const responseText = await response.text();
+		console.log("【步骤5】收到的原始响应文本 (Raw Text):", responseText);
+
+		if (!response.ok) {
+			throw new Error(`API请求失败: ${response.status} ${responseText}`);
+		}
+
+		// 6. 解析JSON
+		const jsonResponse = JSON.parse(responseText);
+		console.log("【步骤6】解析后的JSON数据:", jsonResponse);
+
+		const outputContent = jsonResponse.data[0];
+
+		// 7. 模拟流式返回给UI
+		async function* createSingleResponse() {
+			yield { content: outputContent };
+		}
+		return createSingleResponse();
+
+	} catch (error) {
+		console.error("【捕获异常】在请求或处理过程中发生严重错误:", error);
+		// 向上抛出异常，让UI显示错误信息
+		throw error;
 	}
-
-	// API 现在直接返回一个 JSON 对象，不再是流，所以我们直接解析它
-	const jsonResponse = await response.json();
-	
-	// 从返回的数据中提取模型输出
-	// 根据官方示例，结果在 .data 字段中，它是一个数组
-	const outputContent = jsonResponse.data[0];
-
-	// 为了适配您前端可能存在的流式UI，我们模拟一个只包含最终结果的“流”
-	async function* createSingleResponse() {
-		yield { content: outputContent };
-	}
-
-	return createSingleResponse();
 }
