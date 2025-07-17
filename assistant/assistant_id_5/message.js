@@ -1,60 +1,65 @@
+// --- START OF FILE message.js ---
+
 import { loadConfig } from './config.js'
 
-export async function getResponse(messages) {
-	// 1. 加载配置
+// ===================================================================
+//                        【核心修改】
+// ===================================================================
+
+// 1. [删除] 不再需要 createStreamReader 函数，因为后端是非流式的。
+
+// 2. [重构] getResponse 函数，以适配您的自定义后端
+export async function* getResponse(messages) {
+	// 加载包含所有参数的完整配置
 	const config = loadConfig();
 
-	// 2. 获取最新用户消息
+	// 3. [修改] 从消息历史中提取最后一条用户消息
+	//    您的后端只接收最后一条用户消息，而不是整个历史记录
 	const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-	if (!lastUserMessage) {
-		throw new Error("没有找到可以发送的用户消息。");
+	if (!lastUserMessage || typeof lastUserMessage.content !== 'string') {
+		// 如果没有找到有效的用户消息，则抛出错误或返回空
+		throw new Error('未找到有效的用户输入或输入格式不正确（不支持图片）。');
 	}
 
-	// ==================================================================
-	//                        【终极核心修正】
-	//   构建一个符合 Gradio 底层协议的、包含 fn_index 和 data 的请求体
-	// ==================================================================
+	// 4. [修改] 构建符合您后端 API 要求的请求体
+	//    字段名必须与您 FastAPI 函数中的 .get() 调用完全一致
 	const requestBody = {
-        // 在您当前的 app.py 中，api_interface 是第二个被定义的，
-        // 它的函数在内部的索引通常是 1。
-        // （第一个是 ui_interface 的函数，索引为 0）
-		fn_index: 1, 
-		data: [
-			lastUserMessage.content,
-			config.system_message,
-			Number(config.max_tokens),
-			Number(config.temperature),
-			Number(config.top_p),
-		]
-	};
-
-	try {
-		const response = await fetch(config.baseURL, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(requestBody),
-		});
-
-		const responseText = await response.text();
-
-		if (!response.ok) {
-			console.error("服务器返回错误:", responseText);
-			throw new Error(`API请求失败: ${response.status} ${responseText}`);
-		}
+		message: lastUserMessage.content,          // 单个字符串
+		system_message: config.systemPrompt,       // 来自配置的系统提示
 		
-		const jsonResponse = JSON.parse(responseText);
-        
-        // 返回的数据在 .data 字段中，它是一个数组
-		const outputContent = jsonResponse.data[0];
+		// 数值型参数
+		temperature: Number(config.temperature),
+		top_p: Number(config.top_p),
+		max_tokens: parseInt(config.max_tokens, 10),
+	};
+	
+	// 5. [修改] 发送 fetch 请求，并处理非流式响应
+	const response = await fetch(config.baseURL, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify(requestBody),
+	});
 
-		// 模拟流式返回给UI
-		async function* createSingleResponse() {
-			yield { content: outputContent };
-		}
-		return createSingleResponse();
-
-	} catch (error) {
-		console.error("在 getResponse 函数中捕获到严重错误:", error);
-		throw error;
+	if (!response.ok) {
+		const errorData = await response.text();
+		throw new Error(`API请求失败: ${response.status} ${errorData}`);
 	}
+
+	// 6. [修改] 将一次性收到的完整文本包装成模拟的流式数据块
+	//    这是为了与前端其他部分（调用 getResponse 的代码）保持兼容
+	const fullText = await response.text();
+	
+	// 模拟 OpenAI 流式响应的格式，将完整文本一次性 yield 出去
+	yield {
+		choices: [{
+			delta: {
+				content: fullText
+			}
+		}]
+	};
+	
+	// 生成器结束
+	return;
 }
