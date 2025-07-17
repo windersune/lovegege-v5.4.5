@@ -7,7 +7,7 @@ const STORAGE_KEY = 'config'
 //                        【终极核心修正】
 //       将 URL 指向 Gradio 底层的通用预测端点
 // ==================================================================
-const HUGGINGFACE_API_URL = 'https://badanwang-teacher-basic-qwen3-0-6b.hf.space/run/predict'
+const HUGGINGFACE_API_URL = 'https://badanwang-teacher-basic-qwen3-0-6b.hf.space/run/laoshifu'
 
 // 参数的默认值保持不变
 const DEFAULT_CONFIG = {
