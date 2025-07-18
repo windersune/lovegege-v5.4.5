@@ -5,6 +5,19 @@
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>格格小助手</title>
+
+    <!--
+      【重要】在这里添加“导入映射”
+      这个脚本必须放在所有 type="module" 的脚本之前。
+      它告诉浏览器 @gradio/client 这个名字实际上代表了后面的CDN地址。
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@gradio/client": "https://cdn.jsdelivr.net/npm/@gradio/client@0.16.1/dist/index.min.js"
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>
