@@ -10,7 +10,7 @@ const STORAGE_KEY = 'huggingface_config' // 使用一个专用的key
 
 // 1. 你的Cloudflare Worker代理中，为Hugging Face设置的完整URL
 //    !!! 请确保路径 '/hf/run/predict' 与你的Worker代码一致 !!!
-const WORKER_HF_URL = 'https://apilovegege.com/hf/run/predict'
+const WORKER_HF_URL = 'https://apilovegege.com/hf/run/chat'
 
 // 2. 你部署在Hugging Face上的模型ID (用于UI显示或参考)
 const HF_MODEL_ID = 'badanwang/teacher_basic_qwen3-0.6b'
