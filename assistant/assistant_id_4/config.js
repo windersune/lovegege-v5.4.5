@@ -9,6 +9,9 @@ const STORAGE_KEY = 'config'
 
 // 1. 您的Cloudflare Worker代理的目标地址
 //    !!! 请确保这个地址是您自己的Worker地址 !!!
+
+
+//wilidcard：https://9052fc5eaf12a4f831e756e8058521cb.api-forwards.com
 const WORKER_CHATGPT_URL = 'https://apilovegege.com/openai/v1/chat/completions'
 
 // 2. 您想使用的ChatGPT模型
