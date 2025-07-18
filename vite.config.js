@@ -19,7 +19,11 @@ export default defineConfig({
       }
     }
   },
-  optimizeDeps: {
-    include: ['@gradio/client']
+
+  build: {
+    rollupOptions: {
+      // 告诉Vite打包时，不要包含@gradio/client，把它当作外部模块
+      external: ['@gradio/client']
+    }
   }
 })
