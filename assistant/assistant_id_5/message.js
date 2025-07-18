@@ -1,11 +1,11 @@
-// --- message.js (最终修正版 - NPM/Yarn 导入) ---
+// --- message.js (最终代码) ---
 
-// 【重要修正】直接从安装的包中导入client
+// 直接从安装好的 @gradio/client 包中导入 client
 import { client } from "@gradio/client";
 import { loadConfig } from './config.js'
 
 /**
- * 模拟流式读取器 (此函数保持不变)
+ * 模拟流式读取器，让UI有打字机效果
  */
 async function* simulateStreamReader(fullText) {
 	const chunks = fullText.split('');
@@ -22,7 +22,6 @@ async function* simulateStreamReader(fullText) {
 	}
 }
 
-
 export async function getResponse(messages) {
 	const config = loadConfig();
 
@@ -30,7 +29,7 @@ export async function getResponse(messages) {
 		throw new Error("Hugging Face Space URL未配置，请在设置中检查。");
 	}
 
-	// --- 数据格式转换 (保持不变) ---
+	// 转换消息格式，以适配Gradio API
 	const currentUserMessage = messages[messages.length - 1].content;
 	const gradioHistory = [];
 	const historyMessages = messages.slice(0, -1);
@@ -45,21 +44,16 @@ export async function getResponse(messages) {
 	}
 	
 	try {
-        // --- 使用 @gradio/client (逻辑保持不变, 仅导入方式改变) ---
-
-        // 1. 初始化客户端
+        // 使用 @gradio/client 连接并调用API
         const app = await client(config.baseURL);
-
-        // 2. 调用 predict API
         const result = await app.predict('/predict', {
+            // 参数名必须和你的python函数参数名完全一致
             message: currentUserMessage,
             history: gradioHistory
         });
 
-        // 3. 提取数据
+        // 提取并返回结果
         const modelResponseText = result.data[0];
-        
-        // 4. 返回模拟流
         return simulateStreamReader(modelResponseText);
 
     } catch (error) {
