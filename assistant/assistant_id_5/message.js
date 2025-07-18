@@ -1,5 +1,3 @@
-// --- message.js ---
-
 import { loadConfig } from './config.js'
 
 /**
@@ -81,21 +79,4 @@ export async function getResponse(messages) {
 	const result = await response.json();
 	const modelResponseText = result.data[0];
 	return simulateStreamReader(modelResponseText);
-}```
-
-### 修改说明
-
-1.  **定位问题**：错误的根源在于 `fetch` 请求的URL拼接方式不够安全。
-2.  **核心修改**：我在 `fetch` 请求之前加入了**两行新代码**：
-    *   `const cleanedBaseURL = config.baseURL.endsWith('/') ? config.baseURL.slice(0, -1) : config.baseURL;`
-    *   `const apiEndpoint = \`${cleanedBaseURL}/run/predict\`;`
-3.  **代码作用**：这段新代码会在拼接URL之前，先检查 `baseURL` 是否以 `/` 结尾。如果是，就把它删掉，确保最终的API地址**永远是正确**的 `.../run/predict` 格式，避免了 `...//run/predict` 这样的错误。
-4.  **增加调试信息**：我还加了一句 `console.log` 来打印出最终请求的URL，方便你后续排查问题。
-
-**请执行以下操作：**
-
-1.  用上面的完整代码替换你项目中的 `message.js` 文件。
-2.  **无需修改 `config.js`**，无论它里面的URL带不带斜杠，新代码都能处理。
-3.  清除浏览器缓存后重新运行你的H5应用。
-
-这样修改后，你的H5应用就应该能和Python一样正常调用API了。
+}
