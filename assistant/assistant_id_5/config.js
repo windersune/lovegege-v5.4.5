@@ -12,7 +12,7 @@ const STORAGE_KEY = 'huggingface_space_config'
 // 1. 你的Hugging Face Space的公共URL
 //    !!! 必须替换为你自己的地址 !!!
 //    例如: "https://badawang-teacher-basic-qwen3-0-6b.hf.space"
-const YOUR_SPACE_URL = "https://badawang-teacher-basic-qwen3-0-6b.hf.space";
+const YOUR_SPACE_URL = "https://badanwang-teacher-basic-qwen3-0-6b.hf.space";
 
 // ===================================================================
 
