@@ -1,10 +1,11 @@
+// --- message.js (最终修正版 - NPM/Yarn 导入) ---
+
+// 【重要修正】直接从安装的包中导入client
+import { client } from "@gradio/client";
 import { loadConfig } from './config.js'
 
 /**
- * 模拟流式读取器
- * Gradio API 一次性返回完整数据，此函数将其分解为小块，
- * 以便前端可以像处理真实流一样实现打字机效果。
- * @param {string} fullText - 从API获取到的完整回复文本
+ * 模拟流式读取器 (此函数保持不变)
  */
 async function* simulateStreamReader(fullText) {
 	const chunks = fullText.split('');
@@ -29,7 +30,7 @@ export async function getResponse(messages) {
 		throw new Error("Hugging Face Space URL未配置，请在设置中检查。");
 	}
 
-	// --- 【核心逻辑】数据格式转换 ---
+	// --- 数据格式转换 (保持不变) ---
 	const currentUserMessage = messages[messages.length - 1].content;
 	const gradioHistory = [];
 	const historyMessages = messages.slice(0, -1);
@@ -43,40 +44,26 @@ export async function getResponse(messages) {
 		}
 	}
 	
-	const requestBody = {
-		"data": [
-			currentUserMessage,
-			gradioHistory
-		]
-	};
+	try {
+        // --- 使用 @gradio/client (逻辑保持不变, 仅导入方式改变) ---
 
-	// ---【重要修正】---
-	// 健壮地构建API端点URL，避免双斜杠问题。
-	// 1. 先移除baseURL末尾可能存在的'/'
-	const cleanedBaseURL = config.baseURL.endsWith('/') ? config.baseURL.slice(0, -1) : config.baseURL;
-	// 2. 再安全地拼接路径
-	const apiEndpoint = `${cleanedBaseURL}/run/predict`;
-	
-	// 打印出最终请求的地址，方便调试
-	console.log("准备请求的Gradio API地址:", apiEndpoint);
+        // 1. 初始化客户端
+        const app = await client(config.baseURL);
 
-	// 4. 发起API请求
-	const response = await fetch(apiEndpoint, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-		},
-		body: JSON.stringify(requestBody),
-	});
+        // 2. 调用 predict API
+        const result = await app.predict('/predict', {
+            message: currentUserMessage,
+            history: gradioHistory
+        });
 
-	if (!response.ok) {
-		const errorData = await response.text();
-		// 打印出服务器返回的原始错误内容，帮助分析
-		console.error("Gradio API返回的原始错误内容:", errorData);
-		throw new Error(`对Gradio API的请求失败: ${response.status} ${errorData.slice(0, 100)}`); // 只显示前100个字符避免刷屏
-	}
+        // 3. 提取数据
+        const modelResponseText = result.data[0];
+        
+        // 4. 返回模拟流
+        return simulateStreamReader(modelResponseText);
 
-	const result = await response.json();
-	const modelResponseText = result.data[0];
-	return simulateStreamReader(modelResponseText);
+    } catch (error) {
+        console.error("调用 @gradio/client 时出错:", error);
+        throw new Error(`与Gradio Space通信失败: ${error.message}`);
+    }
 }
