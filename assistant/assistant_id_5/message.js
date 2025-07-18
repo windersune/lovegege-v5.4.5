@@ -1,40 +1,75 @@
-// --- START OF FILE message.js ---
+// --- message.js ---
 
 import { loadConfig } from './config.js'
 
-// ===================================================================
-//                        【核心修改】
-// ===================================================================
+/**
+ * 模拟流式读取器
+ * Gradio API 一次性返回完整数据，此函数将其分解为小块，
+ * 以便前端可以像处理真实流一样实现打字机效果。
+ * @param {string} fullText - 从API获取到的完整回复文本
+ */
+async function* simulateStreamReader(fullText) {
+	// 将文本拆分成单个字符，模拟打字效果
+	const chunks = fullText.split('');
+	
+	for (const chunk of chunks) {
+		// 模拟OpenAI流的格式，以免破坏现有UI逻辑
+		const responseChunk = {
+			choices: [{
+				delta: {
+					content: chunk
+				}
+			}]
+		};
+		yield responseChunk;
+		
+		// 在每个字符之间添加一个微小的延迟，让效果更平滑
+		await new Promise(resolve => setTimeout(resolve, 5));
+	}
+}
 
-// 1. [删除] 不再需要 createStreamReader 函数，因为后端是非流式的。
 
-// 2. [重构] getResponse 函数，以适配您的自定义后端
-export async function* getResponse(messages) {
-	// 加载包含所有参数的完整配置
+export async function getResponse(messages) {
+	// 加载包含你的Space URL的配置
 	const config = loadConfig();
 
-	// 3. [修改] 从消息历史中提取最后一条用户消息
-	//    您的后端只接收最后一条用户消息，而不是整个历史记录
-	const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-	if (!lastUserMessage || typeof lastUserMessage.content !== 'string') {
-		// 如果没有找到有效的用户消息，则抛出错误或返回空
-		throw new Error('未找到有效的用户输入或输入格式不正确（不支持图片）。');
+	if (!config.baseURL) {
+		throw new Error("Hugging Face Space URL未配置，请在设置中检查。");
 	}
 
-	// 4. [修改] 构建符合您后端 API 要求的请求体
-	//    字段名必须与您 FastAPI 函数中的 .get() 调用完全一致
-	const requestBody = {
-		message: lastUserMessage.content,          // 单个字符串
-		system_message: config.systemPrompt,       // 来自配置的系统提示
-		
-		// 数值型参数
-		temperature: Number(config.temperature),
-		top_p: Number(config.top_p),
-		max_tokens: parseInt(config.max_tokens, 10),
-	};
+	// --- 【核心逻辑】数据格式转换 ---
+	// Gradio API 需要 (message, history) 两个参数
 	
-	// 5. [修改] 发送 fetch 请求，并处理非流式响应
-	const response = await fetch(config.baseURL, {
+	// 1. 从消息数组中提取出最后一条用户消息
+	const currentUserMessage = messages[messages.length - 1].content;
+	
+	// 2. 将剩余的消息转换为Gradio需要的history格式
+	//    格式: [[user_msg_1, assistant_msg_1], [user_msg_2, assistant_msg_2], ...]
+	const gradioHistory = [];
+	const historyMessages = messages.slice(0, -1);
+	
+	for (let i = 0; i < historyMessages.length; i += 2) {
+		// 确保我们成对处理用户和助手的消息
+		if (historyMessages[i].role === 'user' && historyMessages[i+1]?.role === 'assistant') {
+			gradioHistory.push([
+				historyMessages[i].content,
+				historyMessages[i+1].content
+			]);
+		}
+	}
+	
+	// 3. 构建请求体
+	//    注意：格式与你之前的OpenAI格式完全不同
+	const requestBody = {
+		"data": [
+			currentUserMessage, // 参数1: message (字符串)
+			gradioHistory       // 参数2: history (数组)
+		]
+	};
+
+	// 4. 发起API请求
+	//    请求的端点是 /run/predict
+	const response = await fetch(`${config.baseURL}/run/predict`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
@@ -44,22 +79,15 @@ export async function* getResponse(messages) {
 
 	if (!response.ok) {
 		const errorData = await response.text();
-		throw new Error(`API请求失败: ${response.status} ${errorData}`);
+		throw new Error(`对Gradio API的请求失败: ${response.status} ${errorData}`);
 	}
 
-	// 6. [修改] 将一次性收到的完整文本包装成模拟的流式数据块
-	//    这是为了与前端其他部分（调用 getResponse 的代码）保持兼容
-	const fullText = await response.text();
+	const result = await response.json();
 	
-	// 模拟 OpenAI 流式响应的格式，将完整文本一次性 yield 出去
-	yield {
-		choices: [{
-			delta: {
-				content: fullText
-			}
-		}]
-	};
-	
-	// 生成器结束
-	return;
+	// 从返回的JSON中提取模型的回复文本
+	// Gradio的返回格式是 {"data": ["模型的回复在这里"], ...}
+	const modelResponseText = result.data[0];
+
+	// 返回一个模拟的流式读取器，让UI可以逐字显示回复
+	return simulateStreamReader(modelResponseText);
 }
