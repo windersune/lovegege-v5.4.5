@@ -1,5 +1,5 @@
 // File: config.js
-// 这是严格按照官方文档修正的最终版本
+// [最终版] 已切换到非流式（blocking）模式
 
 // --- 配置 ---
 const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t";
@@ -8,19 +8,18 @@ const CHAT_ENDPOINT = `${API_BASE_URL}/v1/chat-messages`;
 const USER_ID = "mada-123";
 
 /**
- * [最终版] 这个函数严格按照Dify官方文档构造请求。
+ * [核心修改] 函数名和逻辑已变更为非流式（blocking）模式。
+ * 它不再需要回调函数，而是直接返回一个包含最终结果的Promise。
  */
-export async function runDifyWorkflowStream(query, conversationId = null, onDataCallback, onDoneCallback, onErrorCallback) {
+export async function getDifyChatResponse(query, conversationId = null) {
 	try {
-		// [核心修正] 根据您提供的官方curl命令，构造100%正确的Payload。
-		// 它必须同时包含 "inputs": {} 和 "query": "..." 这两个顶层键。
+		// [核心修改] response_mode 已从 "streaming" 改为 "blocking"
 		const payload = {
-			"inputs": {}, // 必须存在，即使为空对象
+			"inputs": {},
 			"query": query,
-			"response_mode": "streaming",
+			"response_mode": "blocking", 
 			"user": USER_ID,
 			"conversation_id": conversationId || ''
-			// "files" 参数是可选的，我们暂时不加
 		};
 		
 		const response = await fetch(CHAT_ENDPOINT, {
@@ -37,58 +36,28 @@ export async function runDifyWorkflowStream(query, conversationId = null, onData
 			throw new Error(`API请求失败，状态码: ${response.status}. 响应: ${errorText}`);
 		}
 		
-		// 后续的流式处理逻辑是正确的，保持不变
-		const reader = response.body.getReader();
-		const decoder = new TextDecoder();
-		let buffer = '';
-		let fullResponse = '';
-		let newConversationId = conversationId;
+		// [核心修改] 不再读取流，而是直接解析完整的JSON响应
+		const result = await response.json();
 		
-		while (true) {
-			const { value, done } = await reader.read();
-			if (done) break;
-			
-			buffer += decoder.decode(value, { stream: true });
-			const lines = buffer.split('\n');
-			buffer = lines.pop() || '';
+		// 为了调试，在控制台打印出Dify返回的完整结果
+		console.log("[DEBUG] Dify 'blocking' 模式返回的完整结果:", result);
 
-			for (const line of lines) {
-				if (line.startsWith('data:')) {
-					const jsonStr = line.substring(5).trim();
-					if (!jsonStr) continue;
-
-					try {
-						const data = JSON.parse(jsonStr);
-						if (data.conversation_id) newConversationId = data.conversation_id;
-						if (data.event === 'agent_message' && typeof data.answer === 'string') {
-							fullResponse += data.answer;
-							if (onDataCallback) onDataCallback(data, data.answer);
-						} else if (data.event === 'error') {
-							throw new Error(`流错误: ${data.code} - ${data.message}`);
-						}
-					} catch (e) {
-						// 忽略解析错误
-					}
-				}
-			}
-		}
-
-		if (onDoneCallback) onDoneCallback();
-		
-		return { conversationId: newConversationId, response: fullResponse };
+		// 从完整的JSON中提取需要的数据并返回
+		return {
+			answer: result.answer,
+			conversationId: result.conversation_id
+		};
 
 	} catch (error) {
-		if (onErrorCallback) onErrorCallback(error);
+		console.error(`[ERROR] Dify API 调用失败: ${error.message}`);
 		throw error;
 	}
 }
 
+
 // --- 为了兼容性，保留旧的导出函数 ---
 export function loadConfig() {
-	return {
-		apiKey: API_KEY,
-		baseURL: API_BASE_URL
-	};
+	return { apiKey: API_KEY, baseURL: API_BASE_URL };
 }
 
 export function hasValidConfig() {
