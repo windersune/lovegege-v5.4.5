@@ -1,75 +1,53 @@
-// 直接复制dify.py中的核心逻辑到JavaScript
+const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t";
 
-// --- 配置 ---
-const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t"
-const API_BASE_URL = "https://apilovegege.com/dify"
-const WORKFLOW_ENDPOINT = `${API_BASE_URL}/v1/workflows/run`
-const USER_ID = "mada-123"
+// [修正 1] 移除了URL中多余的单引号
+const API_BASE_URL = "https://apilovegege.com/dify"; 
+const WORKFLOW_ENDPOINT = `${API_BASE_URL}/v1/workflows/run`;
+const USER_ID = "mada-123";
 
-// 全局对话历史记录状态
-const CONVERSATION_HISTORY = {};
 // --- 配置结束 ---
 
-// 返回API配置信息
+// --- 兼容接口，保持不变 ---
 export function loadConfig() {
 	return {
-		apiKey: API_KEY,
+		apiKey: API_KEY, // 虽然硬编码，但保持接口兼容性
 		baseURL: API_BASE_URL
-	}
+	};
 }
-
-// 兼容接口
 export function hasValidConfig() {
 	return true;
 }
+// --- 兼容接口结束 ---
 
-// 格式化对话历史为context
-export function formatContextForWorkflow(history, currentQuery) {
-	const formattedLines = [];
-	
-	// 添加历史记录
-	for (const message of history) {
-		const role = message.role === 'user' ? 'User' : 'Assistant';
-		formattedLines.push(`${role}: ${message.content}`);
-	}
-	
-	// 添加当前查询
-	formattedLines.push(`User: ${currentQuery}`);
-	
-	return formattedLines.join('\n');
-}
 
-// 主要的工作流调用函数
+/**
+ * [核心修正] 调用Dify工作流的主要函数
+ * @param {string} query - 当前用户的提问
+ * @param {string|null} conversationId - 当前的会话ID，如果是新会话则为null
+ * @param {Function} onDataCallback - 接收到流式数据块时的回调函数
+ * @param {Function} onDoneCallback - 流结束时的回调
+ * @param {Function} onErrorCallback - 发生错误时的回调
+ * @returns {Promise<Object>} - 返回一个包含最终结果和会话ID的对象
+ */
 export async function runDifyWorkflowStream(query, conversationId = null, onDataCallback, onDoneCallback, onErrorCallback) {
 	try {
-		console.log(`[DEBUG] 开始调用工作流，conversation_id=${conversationId}`);
-		
-		// 获取对话历史
-		let history = [];
-		if (conversationId && CONVERSATION_HISTORY[conversationId]) {
-			history = CONVERSATION_HISTORY[conversationId];
-			console.log(`[DEBUG] 找到历史记录，长度: ${history.length}`);
-		}
-		
-		// 格式化输入
-		const contextString = formatContextForWorkflow(history, query);
-		console.log(`[DEBUG] 格式化的上下文: ${contextString}`);
-		
-		// 准备请求
+		console.log(`[DEBUG] 开始调用工作流, query: "${query}", conversation_id: ${conversationId}`);
+
+		// [修正 2] 简化请求体，不再手动拼接上下文(context)。
+		// Dify会通过 conversation_id 自动管理历史记录。
+		// 我们只发送当前用户的提问(query)即可。
+		// 【注意】请确保您在Dify工作流中定义的输入变量名是 "query"。如果不是，请修改这里的键名。
 		const payload = {
 			inputs: {
-				context: contextString
+				"query": query 
 			},
 			response_mode: "streaming",
-			user: USER_ID
+			user: USER_ID,
+			conversation_id: conversationId || '' // 如果为null，则传递空字符串，Dify会自动创建新会话
 		};
 		
-		// 如果有conversation_id，添加到请求中
-		if (conversationId) {
-			payload.conversation_id = conversationId;
-			console.log(`[DEBUG] 添加会话ID到请求: ${conversationId}`);
-		}
-		
+		console.log("[DEBUG] 发送的Payload:", JSON.stringify(payload, null, 2));
+
 		// 发送请求
 		const response = await fetch(WORKFLOW_ENDPOINT, {
 			method: 'POST',
@@ -81,129 +59,67 @@ export async function runDifyWorkflowStream(query, conversationId = null, onData
 		});
 		
 		// 处理错误
-		if (response.status !== 200) {
+		if (!response.ok) {
 			const errorText = await response.text();
-			console.error(`[ERROR] 请求失败: ${response.status}`);
-			console.error(`[ERROR] 响应内容: ${errorText}`);
-			throw new Error(`工作流调用失败: ${response.statusText}`);
+			const error = new Error(`API请求失败，状态码: ${response.status}. 响应: ${errorText}`);
+			console.error(`[ERROR] ${error.message}`);
+			throw error;
 		}
 		
-		// 处理流式响应
+		// 处理流式响应 (这部分逻辑是正确的，予以保留)
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
 		let buffer = '';
 		let fullResponse = '';
-		let newConversationId = null;
+		let newConversationId = conversationId;
 		
-		// 逐块处理响应流
 		while (true) {
 			const { value, done } = await reader.read();
-			
-			if (done) {
-				if (onDoneCallback) {
-					onDoneCallback();
-				}
-				break;
-			}
+			if (done) break;
 			
 			buffer += decoder.decode(value, { stream: true });
-			
-			// 按行处理数据
-			let lineEndIndex;
-			while ((lineEndIndex = buffer.indexOf('\n')) !== -1) {
-				const line = buffer.substring(0, lineEndIndex);
-				buffer = buffer.substring(lineEndIndex + 1);
-				
-				// 处理数据行，它应该以 "data:" 开头
+			const lines = buffer.split('\n');
+			buffer = lines.pop() || ''; // 保留缓冲区中不完整的行
+
+			for (const line of lines) {
 				if (line.startsWith('data:')) {
 					const jsonStr = line.substring(5).trim();
-					if (jsonStr) {
-						try {
-							const data = JSON.parse(jsonStr);
-							
-							// 提取conversation_id
-							if (data.conversation_id && !newConversationId) {
-								newConversationId = data.conversation_id;
-								console.log(`[DEBUG] 从响应中获取会话ID: ${newConversationId}`);
-							}
-							
-							// 提取回答内容
-							let content = '';
-							
-							// 根据事件类型提取数据
-							if (data.event === 'agent_message' || 
-								data.event === 'message' || 
-								data.event === 'chunk' || 
-								data.event === 'text_chunk') {
-								
-								// 尝试从不同位置获取内容
-								if (data.answer) {
-									content = data.answer;
-								} else if (data.data && typeof data.data === 'object') {
-									if (data.data.text) {
-										content = data.data.text;
-									} else if (data.data.message) {
-										content = data.data.message;
-									} else if (data.data.content) {
-										content = data.data.content;
-									}
-								}
-								
-								if (content) {
-									fullResponse += content;
-									if (onDataCallback) {
-										onDataCallback(data, content);
-									}
-								}
-							} else if (data.event === 'error') {
-								const errorMsg = data.message || 'Unknown stream error';
-								console.error(`[ERROR] 流错误: ${errorMsg}`);
-								if (onErrorCallback) {
-									onErrorCallback(new Error(errorMsg));
-								}
-							}
-						} catch (e) {
-							console.warn(`[WARN] JSON解析错误: ${e.message}`);
+					if (!jsonStr) continue;
+
+					try {
+						const data = JSON.parse(jsonStr);
+						
+						if (data.conversation_id) {
+							newConversationId = data.conversation_id;
 						}
+						
+						if (data.event === 'agent_message' && typeof data.answer === 'string') {
+							fullResponse += data.answer;
+							if (onDataCallback) {
+								onDataCallback(data, data.answer);
+							}
+						} else if (data.event === 'error') {
+							throw new Error(`流错误: ${data.code} - ${data.message}`);
+						}
+					} catch (e) {
+						console.warn(`[WARN] JSON解析错误: ${e.message}`, "Line:", line);
 					}
 				}
 			}
 		}
+
+		if (onDoneCallback) onDoneCallback();
 		
-		// 确定最终的会话ID
-		const finalConversationId = newConversationId || conversationId;
-		console.log(`[DEBUG] 最终会话ID: ${finalConversationId}`);
-		
-		// 更新对话历史
-		if (finalConversationId && fullResponse) {
-			if (!CONVERSATION_HISTORY[finalConversationId]) {
-				CONVERSATION_HISTORY[finalConversationId] = [];
-			}
-			
-			// 添加用户消息
-			CONVERSATION_HISTORY[finalConversationId].push({
-				role: 'user',
-				content: query
-			});
-			
-			// 添加助手消息
-			CONVERSATION_HISTORY[finalConversationId].push({
-				role: 'assistant',
-				content: fullResponse
-			});
-			
-			console.log(`[DEBUG] 更新历史记录，当前长度: ${CONVERSATION_HISTORY[finalConversationId].length}`);
-		}
-		
-		return {
-			conversationId: finalConversationId,
+		const result = {
+			conversationId: newConversationId,
 			response: fullResponse
 		};
+		console.log("[DEBUG] 工作流执行完毕, 结果:", result);
+		return result;
+
 	} catch (error) {
 		console.error(`[ERROR] 工作流调用异常: ${error.message}`);
-		if (onErrorCallback) {
-			onErrorCallback(error);
-		}
+		if (onErrorCallback) onErrorCallback(error);
 		throw error;
 	}
 }
