@@ -16,7 +16,7 @@ export async function getDifyChatResponse(query, imageBase64 = null, conversatio
 		const payload = {
 			"inputs": {},
 			"query": query,
-			"response_mode": "blocking", 
+			"response_mode": "streaming", 
 			"user": USER_ID,
 			"conversation_id": conversationId || ''
 		};
