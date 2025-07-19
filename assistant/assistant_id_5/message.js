@@ -1,9 +1,9 @@
 import { loadConfig } from './config.js'
-// 引入 @gradio/client 库
+// 【新】: 引入 @gradio/client 库
 import { client } from "https://esm.sh/@gradio/client";
 
 /**
- * [最终确认的逻辑] 使用 @gradio/client，通过计算增量(delta)实现流式“打字机”效果。
+ * [核心重构] 使用 @gradio/client 和 for-await-of 循环获取流式响应
  * @param {Array<Object>} messages - 聊天历史记录
  * @returns {AsyncGenerator} - 产出包含增量内容({delta: {content: "..."}})的对象的异步生成器
  */
@@ -11,7 +11,7 @@ export async function* getResponse(messages) {
 	// 加载包含正确 baseURL 的配置
 	const config = loadConfig();
 
-	// 1. 提取最后一条用户消息作为 prompt
+	// 1. 提取最后一条用户消息作为 prompt (逻辑保持不变)
 	const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
 	if (!lastUserMessage) {
 		throw new Error("消息历史中没有找到用户消息。");
@@ -23,34 +23,31 @@ export async function* getResponse(messages) {
 		throw new Error("无法从最后一条用户消息中提取文本内容。");
 	}
     
-    // 2. [核心] 创建一个“记忆”变量，用来存储上一次接收到的完整回复
+    // 用于存储上一次的完整回复，以便计算增量
     let lastFullReply = "";
 
 	try {
-        // 3. 连接到您的应用根地址
+        // 2. 连接到您的应用根地址
 		const app = await client(config.baseURL);
 
-        // 4. 提交任务到 /chat API，获取异步可迭代的 job 对象
+        // 3. 提交任务到 /chat API，获取异步可迭代的 job 对象
+        //    参数必须是数组，按顺序对应Python函数的参数
 		const job = app.submit('/chat', [
 			promptText,
 			[] // 此处传入空数组作为 history
 		]);
 
-        // 5. 使用 for await...of 循环来处理异步流
+        // 4. 【最终正确逻辑】: 使用 for await...of 循环来处理异步流
 		for await (const chunk of job) {
-            // 从数据块中提取出当前时刻的完整回复
+            // chunk 的标准结构是 { data: ["完整的回复..."] }
 			const currentFullReply = chunk.data[0];
             
-            // 6. [核心] 计算本次新增的文本 (delta)
-            //    用当前的完整回复，减去(substring)我们“记忆”中的上一段回复
+            // 5. 计算本次新增的文本 (delta)
             const delta = currentFullReply.substring(lastFullReply.length);
-            
-            // 7. [核心] 更新“记忆”，为下一次计算做准备
-            lastFullReply = currentFullReply;
+            lastFullReply = currentFullReply; // 更新记录
 
-            // 8. 如果计算出了新的内容 (delta不为空)
             if (delta) {
-                // 就只将这个新增的部分包装成UI兼容的格式并产出
+                // 6. 将增量文本包装成UI兼容的格式并产出
                 yield {
                     choices: [{
                         delta: {
