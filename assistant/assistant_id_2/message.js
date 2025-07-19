@@ -72,7 +72,7 @@ export async function getResponse(messages) {
 		
 		temperature: Number(config.temperature),
 		top_p: Number(config.top_p),
-		max_tokens: parseInt(config.max_tokens, 10),
+		max_tokens: parseInt(config.max_completion_tokens, 10),
 		presence_penalty: Number(config.presence_penalty),
 		frequency_penalty: Number(config.frequency_penalty),
 	};
