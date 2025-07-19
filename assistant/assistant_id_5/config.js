@@ -1,27 +1,26 @@
 import * as storage from '@/utils/storage.js'
 
-// 保存在 localStorage 中的配置信息的 key
-const STORAGE_KEY = 'config'
+// 保存在 localStorage 中的配置信息的 key (建议为新配置使用新的key)
+const STORAGE_KEY = 'hf_space_config'
 
-// ===================================================================
-//                        【核心修改】
-// ===================================================================
 
-// 1. 您的Cloudflare Worker代理的目标地址
-//    !!! 请确保这个地址是您自己的Worker地址 !!!
-const WORKER_CHATGPT_URL = 'https://apilovegege.com/openai/v1/chat/completions'
+// 1. 您的Cloudflare Worker代理的目标API地址、
+const HUGGINGFACE_API_URL = 'https://apilovegege.com/chat'
 
-// 2. 您想使用的ChatGPT模型
-const CHATGPT_MODEL_NAME = 'gpt-4o' // 或 'gpt-4o'
+// 2. [可选] 您调用的模型或Space的描述
+const HF_MODEL_NAME = 'Hugging Face Space API'
 
-// 3. [新增] 为所有调试参数设置默认值
+// 3. [修改] Hugging Face API的默认配置
+//    根据您的Python代码，此API似乎没有类似OpenAI的复杂参数。
+//    如果您的Space支持其他参数，可以在这里添加。
 const DEFAULT_CONFIG = {
-	systemPrompt: '你是一个由OpenAI训练的AI助手，请友好并有帮助地回答问题。',
-	temperature: 0.7,      // 温度：控制随机性，越高越随机 (0-2)
-	top_p: 1.0,            // Top P：控制核心词汇范围 (0-1)
-	max_tokens: 2048,      // 最大Token数：限制单次回复的长度
-	presence_penalty: 0.0, // 存在惩罚：-2.0到2.0，正值会鼓励模型谈论新话题
-	frequency_penalty: 0.0 // 频率惩罚：-2.0到2.0，正值会降低重复词语的概率
+	// Hugging Face Space API 通常不支持这些OpenAI参数
+	// systemPrompt: '',
+	// temperature: 0.7,
+	// top_p: 1.0,
+	// max_tokens: 2048,
+	// presence_penalty: 0.0,
+	// frequency_penalty: 0.0
 }
 
 // ===================================================================
@@ -33,12 +32,11 @@ export function loadConfig() {
 	
 	return {
 		// 固定的基础信息
-		baseURL: WORKER_CHATGPT_URL,
-		modelName: CHATGPT_MODEL_NAME,
-		apiKey: '', 
+		baseURL: HUGGINGFACE_API_URL,
+		modelName: HF_MODEL_NAME,
+		apiKey: '', // Hugging Face Space 通常不需要OpenAI格式的API Key
 		
-		// [修改] 将默认配置与用户保存的配置合并
-		// 用户保存的值会覆盖默认值
+		// 将默认配置与用户保存的配置合并
 		...DEFAULT_CONFIG,
 		...savedConfig
 	}
@@ -47,13 +45,9 @@ export function loadConfig() {
 // 保存配置信息到 localStorage
 export function saveConfig(config) {
 	// [修改] 创建一个只包含可调参数的对象进行保存
+	// 如果您的Hugging Face Space有可调参数，请在此处定义
 	const configToSave = {
-		systemPrompt: config.systemPrompt,
-		temperature: config.temperature,
-		top_p: config.top_p,
-		max_tokens: config.max_tokens,
-		presence_penalty: config.presence_penalty,
-		frequency_penalty: config.frequency_penalty,
+		// 例如: some_param: config.some_param
 	};
 	storage.save(STORAGE_KEY, configToSave)
 }
