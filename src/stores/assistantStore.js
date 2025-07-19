@@ -22,7 +22,7 @@ export const useAssistantStore = defineStore('assistant', {
       {
         id: '3',
         name: '奇门老朽木',
-        description: '老了，不中用了，只能讲讲格局了，唉~',
+        description: '老了，不中用了（8月15换鉴权）',
         avatar: '/images/qimen-assistant.jpg',
         available: true,
         supportsImage: false
@@ -47,10 +47,10 @@ export const useAssistantStore = defineStore('assistant', {
       {
         id: '6',
         name: 'dify小助手',
-        description: '基于dify的各种玩法哦，目前使用gemini-2.5pro模型',
+        description: '基于dify的workflow各种玩法，目前接入gemini-2.5-pro！,
         avatar: '/images/general-assistant.jpg',
         available: true,
-        supportsImage: true
+        supportsImage: false
       }
     ]
   }),
