@@ -4,7 +4,7 @@
 const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t"
 const API_BASE_URL = "'https://apilovegege.com/dify"
 const WORKFLOW_ENDPOINT = `${API_BASE_URL}/v1/workflows/run`
-const USER_ID = "my_test_user_workflow_002"
+const USER_ID = "mada-123"
 
 // 全局对话历史记录状态
 const CONVERSATION_HISTORY = {};
