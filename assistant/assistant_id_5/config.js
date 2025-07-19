@@ -9,7 +9,7 @@ const STORAGE_KEY = 'hf_space_config'
 
 // 1. [已修正] 您的Cloudflare Worker代理的目标API地址
 //    Gradio的API端点通常在 /run/ 路径下
-const HUGGINGFACE_API_URL = 'https://apilovegege.com/run/chat' // <--- 这里是关键改动！
+const HUGGINGFACE_API_URL = 'https://apilovegege.com/run/predict' // <--- 这里是关键改动！
 
 // 2. [可选] 您调用的模型或Space的描述
 const HF_MODEL_NAME = 'Hugging Face Space API'
