@@ -1,15 +1,64 @@
 import * as storage from '@/utils/storage.js'
 
-const STORAGE_KEY = 'super_simple_hf_config'
+// 保存在 localStorage 中的配置信息的 key
+const STORAGE_KEY = 'config'
 
-// 1. 你的“智能管家”Worker 的 API 地址
-const SMART_WORKER_URL = 'https://apilovegege.com/hf/chat' // <-- 指向新的智能端点
+// ===================================================================
+//                        【核心修改】
+// ===================================================================
 
-// 2. 模型ID，仅用于UI显示
-const HF_MODEL_ID = 'badanwang/teacher_basic_qwen3-0.6b'
+// 1. 您的Cloudflare Worker代理的目标地址
+//    !!! 请确保这个地址是您自己的Worker地址 !!!
+const WORKER_CHATGPT_URL = 'https://apilovegege.com/openai/v1/chat/completions'
 
-export function loadConfig() {
-	return { baseURL: SMART_WORKER_URL, modelName: HF_MODEL_ID }
+// 2. 您想使用的ChatGPT模型
+const CHATGPT_MODEL_NAME = 'gpt-4o' // 或 'gpt-4o'
+
+// 3. [新增] 为所有调试参数设置默认值
+const DEFAULT_CONFIG = {
+	systemPrompt: '你是一个由OpenAI训练的AI助手，请友好并有帮助地回答问题。',
+	temperature: 0.7,      // 温度：控制随机性，越高越随机 (0-2)
+	top_p: 1.0,            // Top P：控制核心词汇范围 (0-1)
+	max_tokens: 2048,      // 最大Token数：限制单次回复的长度
+	presence_penalty: 0.0, // 存在惩罚：-2.0到2.0，正值会鼓励模型谈论新话题
+	frequency_penalty: 0.0 // 频率惩罚：-2.0到2.0，正值会降低重复词语的概率
 }
-export function saveConfig(config) { storage.save(STORAGE_KEY, {}); }
-export function hasValidConfig() { return true }
+
+// ===================================================================
+
+// 加载配置信息
+export function loadConfig() {
+	// 从localStorage读取用户保存的配置
+	const savedConfig = storage.load(STORAGE_KEY) || {};
+	
+	return {
+		// 固定的基础信息
+		baseURL: WORKER_CHATGPT_URL,
+		modelName: CHATGPT_MODEL_NAME,
+		apiKey: '', 
+		
+		// [修改] 将默认配置与用户保存的配置合并
+		// 用户保存的值会覆盖默认值
+		...DEFAULT_CONFIG,
+		...savedConfig
+	}
+}
+
+// 保存配置信息到 localStorage
+export function saveConfig(config) {
+	// [修改] 创建一个只包含可调参数的对象进行保存
+	const configToSave = {
+		systemPrompt: config.systemPrompt,
+		temperature: config.temperature,
+		top_p: config.top_p,
+		max_tokens: config.max_tokens,
+		presence_penalty: config.presence_penalty,
+		frequency_penalty: config.frequency_penalty,
+	};
+	storage.save(STORAGE_KEY, configToSave)
+}
+
+// 判断配置是否有效（总是返回true）
+export function hasValidConfig() {
+	return true
+}
