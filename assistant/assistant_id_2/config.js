@@ -51,7 +51,7 @@ export function saveConfig(config) {
 		systemPrompt: config.systemPrompt,
 		temperature: config.temperature,
 		top_p: config.top_p,
-		max_tokens: config.max_tokens,
+		max_completion_tokens: config.max_completion_tokens,
 		presence_penalty: config.presence_penalty,
 		frequency_penalty: config.frequency_penalty,
 	};
