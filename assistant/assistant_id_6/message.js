@@ -1,80 +1,84 @@
 // 文件: message.js (用于Dify)
-// [最终微调适配版]
+// [最终流式版]
 
-import { getDifyChatResponse } from './config.js';
+// 1. 导入新的、支持流式的API调用函数
+import { getDifyChatResponseAsStream } from './config.js';
 
-// 维护当前对话ID，保持不变
+// 2. 维护当前对话ID，保持上下文连续性
 let currentConversationId = null;
 
-export async function getResponse(messages) {
-	// 1. 从消息历史中安全地找出最新的用户消息
+/**
+ * [最终流式版] 调用Dify的流式API，并以增量方式产出回复内容。
+ * @param {Array<Object>} messages - 聊天历史记录
+ * @returns {AsyncGenerator} - 产出包含内容增量({delta: {content: "..."}})的对象的异步生成器
+ */
+export async function* getResponse(messages) {
+	// 3. 从消息历史中安全地找出最新的用户消息 (逻辑不变)
 	const latestUserMessage = messages.findLast(msg => msg.role === 'user');
 
-	// 如果找不到用户消息，直接返回提示，避免后续错误
 	if (!latestUserMessage || !latestUserMessage.content) {
 		return (async function* () {
 			yield { choices: [{ delta: { content: "抱歉，我没有收到任何消息内容。" } }] };
 		})();
 	}
 
-	// 2. 初始化将要传递给API的变量
+	// 4. 解析来自UI的 content 字段，提取文本和图片 (逻辑不变)
 	let userQuery = '';
-	let imageBase64 = null; // 用于存储从UI传来的Base64图片数据
-
-	// 3. 【核心适配逻辑】解析来自UI的 content 字段
+	let imageBase64 = null;
 	const { content } = latestUserMessage;
+
 	if (typeof content === 'string') {
-		// a) 如果 content 是字符串，说明是纯文本消息
 		userQuery = content;
 	} else if (Array.isArray(content)) {
-		// b) 如果 content 是数组，说明是多模态消息（包含文本和/或图片）
 		for (const part of content) {
 			if (part.type === 'text') {
-				userQuery = part.text; // 提取文本
+				userQuery = part.text;
 			}
-			// c) 【精确匹配】查找您UI定义的图片字段
 			if (part.type === 'image_url' && part.image_url && part.image_url.url) {
-				// 提取Data URL (e.g., "data:image/png;base64,iVBOR...") 中逗号之后的部分
 				imageBase64 = part.image_url.url.split(',')[1];
 			}
 		}
 	}
-
-	console.log(`[Dify] 准备发送给API -> 文本: "${userQuery}" | 是否有图: ${!!imageBase64}`);
+	
+	// 控制台日志，方便调试
+	console.log(`[Dify] 准备流式发送 -> 文本: "${userQuery}" | 是否有图: ${!!imageBase64}`);
 	console.log(`[Dify] 当前对话ID: ${currentConversationId}`);
 
-	// 4. 使用异步生成器将API调用结果包装起来，以兼容UI的流式显示
-	const streamAsync = async function* () {
-		try {
-			// 调用config中的函数，并传递解析好的文本和图片数据
-			const result = await getDifyChatResponse(userQuery, imageBase64, currentConversationId);
+	try {
+        // 5. 【核心改动】调用新的流式函数，它返回一个可供迭代的流 (stream)
+        const stream = getDifyChatResponseAsStream(userQuery, imageBase64, currentConversationId);
 
-			// 更新会话ID以备下次连续对话使用
-			if (result && result.conversationId) {
-				currentConversationId = result.conversationId;
-				console.log(`[Dify] 已更新会话ID: ${currentConversationId}`);
-			}
-			
-			// 准备最终要显示的答案
-			const answer = (result && result.answer) ? result.answer : "（本次回复为空）";
-			
-			// 以UI期望的格式返回最终答案
-			yield {
-				choices: [{
-					delta: { content: answer }
-				}]
-			};
+        // 6. 【核心改动】使用 for await...of 循环来消费这个流
+        for await (const chunk of stream) {
+            // Dify 流式响应中，增量内容通常在 chunk.answer 字段中
+            const contentChunk = chunk.answer; 
+            
+            // 7. 确保有内容才产出，避免空delta
+            if (contentChunk) {
+                // 将每一个内容增量包装成UI期望的格式并产出
+                yield {
+                    choices: [{
+                        delta: { content: contentChunk }
+                    }]
+                };
+            }
+            
+            // 8. 在流的过程中，持续更新会话ID
+            //    Dify 的流通常在每个数据块里都包含 conversation_id
+            if (chunk.conversation_id) {
+                currentConversationId = chunk.conversation_id;
+            }
+        }
 
-		} catch (error) {
-			// 如果API调用出错，将详细错误信息显示在聊天窗口
-			console.error(`[Dify] API调用出错: ${error.message}`);
-			yield {
-				choices: [{
-					delta: { content: `[Dify API 错误] ${error.message}` }
-				}]
-			};
-		}
-	};
-	
-	return streamAsync();
+        console.log(`[Dify] 流式传输结束。最终会话ID: ${currentConversationId}`);
+
+	} catch (error) {
+		// 如果在API调用或流处理过程中出错，将详细错误信息显示在聊天窗口
+		console.error(`[Dify] 流式API调用出错: ${error.message}`);
+		yield {
+			choices: [{
+				delta: { content: `\n\n[Dify API 错误] ${error.message}` }
+			}]
+		};
+	}
 }
