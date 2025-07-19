@@ -1,134 +1,87 @@
-import { runDifyWorkflowStream } from './config.js'
+export async function runDifyWorkflowStream(query, conversationId = null, onDataCallback, onDoneCallback, onErrorCallback) {
+	// API端点和密钥等配置保持不变
+	const CHAT_ENDPOINT = 'https://apilovegege.com/dify/v1/chat-messages';
+	const API_KEY = 'app-V8ZAbavCEJ20ZKlJ4dRJOr7t';
+	const USER_ID = 'mada-123';
 
-// 一个休眠函数，让程序等待一段时间（单位 ms）
-function sleep(ms) {
-	return new Promise(resolve => setTimeout(resolve, ms))
-}
+	try {
+		console.log(`[DEBUG] 开始调用聊天API, query: "${query}", conversation_id: ${conversationId}`);
 
-// 这个函数用来模拟一个 API 请求，一秒钟后返回字符串
-export async function getMockResponse() {
-	await sleep(1000)
-	return '这是一条模拟的回复'
-}
+		// [核心修正] 将 "query" 重新包装回 "inputs" 对象中，以匹配Dify API的要求。
+		const payload = {
+			"inputs": {
+				"query": query
+			},
+			"response_mode": "streaming",
+			"user": USER_ID,
+			"conversation_id": conversationId || ''
+		};
+		
+		console.log("[DEBUG] 发送的Payload:", JSON.stringify(payload, null, 2));
 
-// 维护当前对话ID，每个会话中保持一致
-let currentConversationId = null;
-
-// 主要的响应获取函数
-export async function getResponse(messages) {
-	// 提取用户最后一条消息内容
-	let userMessage = '';
-	for (let i = messages.length - 1; i >= 0; i--) {
-		if (messages[i].role === 'user') {
-			userMessage = messages[i].content;
-			break;
+		// 发送请求到聊天端点
+		const response = await fetch(CHAT_ENDPOINT, {
+			method: 'POST',
+			headers: {
+				'Authorization': `Bearer ${API_KEY}`,
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(payload)
+		});
+		
+		// 错误处理部分保持不变
+		if (!response.ok) {
+			const errorText = await response.text();
+			const error = new Error(`API请求失败，状态码: ${response.status}. 响应: ${errorText}`);
+			console.error(`[ERROR] ${error.message}`);
+			throw error;
 		}
+		
+		// 流式响应处理部分也保持不变
+		const reader = response.body.getReader();
+		const decoder = new TextDecoder();
+		let buffer = '';
+		let fullResponse = '';
+		let newConversationId = conversationId;
+		
+		while (true) {
+			const { value, done } = await reader.read();
+			if (done) break;
+			
+			buffer += decoder.decode(value, { stream: true });
+			const lines = buffer.split('\n');
+			buffer = lines.pop() || '';
+
+			for (const line of lines) {
+				if (line.startsWith('data:')) {
+					const jsonStr = line.substring(5).trim();
+					if (!jsonStr) continue;
+
+					try {
+						const data = JSON.parse(jsonStr);
+						if (data.conversation_id) newConversationId = data.conversation_id;
+						if (data.event === 'agent_message' && typeof data.answer === 'string') {
+							fullResponse += data.answer;
+							if (onDataCallback) onDataCallback(data, data.answer);
+						} else if (data.event === 'error') {
+							throw new Error(`流错误: ${data.code} - ${data.message}`);
+						}
+					} catch (e) {
+						console.warn(`[WARN] JSON解析错误: ${e.message}`, "Line:", line);
+					}
+				}
+			}
+		}
+
+		if (onDoneCallback) onDoneCallback();
+		
+		const result = { conversationId: newConversationId, response: fullResponse };
+		console.log("[DEBUG] 聊天调用执行完毕, 结果:", result);
+		return result;
+
+	} catch (error) {
+		console.error(`[ERROR] 聊天调用异常: ${error.message}`);
+		if (onErrorCallback) onErrorCallback(error);
+		throw error;
 	}
-	
-	console.log(`[MESSAGE] 开始处理用户消息: ${userMessage.substring(0, 50)}...`);
-	console.log(`[MESSAGE] 当前对话ID: ${currentConversationId}`);
-	
-	// 创建一个异步迭代器来处理流式响应
-	const streamAsync = async function* () {
-		try {
-			// 收集响应内容的队列
-			const responseChunks = [];
-			let responseComplete = false;
-			let responseError = null;
-			
-			// 创建一个Promise来等待响应完成
-			const responsePromise = new Promise((resolve, reject) => {
-				// 调用Dify工作流API，使用直接的回调处理方式
-				runDifyWorkflowStream(
-					userMessage,           // 用户当前消息
-					currentConversationId, // 当前对话ID
-					(data, chunk) => {     // 数据回调
-						if (chunk) {
-							// 接收到内容块，添加到队列
-							responseChunks.push({
-								choices: [
-									{
-										delta: {
-											content: chunk
-										}
-									}
-								]
-							});
-						}
-					},
-					() => {  // 完成回调
-						console.log(`[MESSAGE] 工作流响应完成`);
-						responseComplete = true;
-						resolve();
-					},
-					(error) => {  // 错误回调
-						console.error(`[MESSAGE] 工作流错误: ${error.message}`);
-						responseError = error;
-						responseComplete = true;
-						reject(error);
-					}
-				).then(result => {
-					// 处理结果，保存会话ID
-					if (result && result.conversationId) {
-						console.log(`[MESSAGE] 新的会话ID: ${result.conversationId}`);
-						currentConversationId = result.conversationId;
-					}
-					responseComplete = true;
-					resolve();
-				}).catch(error => {
-					console.error(`[MESSAGE] 请求异常: ${error.message}`);
-					responseError = error;
-					responseComplete = true;
-					reject(error);
-				});
-			});
-			
-			// 使用一个监控函数同时等待响应和检查队列
-			(async () => {
-				try {
-					await responsePromise;
-				} catch (e) {
-					// 错误已在回调中处理
-				}
-			})();
-			
-			// 处理所有响应块
-			let index = 0;
-			while (!responseComplete || index < responseChunks.length) {
-				if (index < responseChunks.length) {
-					// 有可用的响应块，处理它
-					yield responseChunks[index++];
-				} else {
-					// 等待更多响应或完成
-					await sleep(10);
-				}
-			}
-			
-			// 如果有错误，yield错误消息
-			if (responseError) {
-				yield {
-					choices: [
-						{
-							delta: {
-								content: `处理过程中出现错误: ${responseError.message}`
-							}
-						}
-					]
-				};
-			}
-		} catch (error) {
-			console.error(`[MESSAGE] 处理异常: ${error.message}`);
-			yield {
-				choices: [
-					{
-						delta: {
-							content: `处理过程中出现错误: ${error.message}`
-						}
-					}
-				]
-			};
-		}
-	};
-	
-	return streamAsync();
 }
