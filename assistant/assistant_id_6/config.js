@@ -1,4 +1,5 @@
 // File: config.js
+// 这是最终的、正确的版本
 
 // --- 配置 ---
 const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t";
@@ -7,17 +8,14 @@ const CHAT_ENDPOINT = `${API_BASE_URL}/v1/chat-messages`;
 const USER_ID = "mada-123";
 
 /**
- * [核心逻辑] 这个函数负责与Dify API进行实际的通信。
- * 它现在被放置在 config.js 中，并被导出，以满足您的要求。
+ * [最终版] 这个函数负责与Dify API进行实际的通信。
  */
 export async function runDifyWorkflowStream(query, conversationId = null, onDataCallback, onDoneCallback, onErrorCallback) {
 	try {
-		// [这是最终正确的Payload结构] 
-		// Dify的chat-messages接口也需要将输入包装在 "inputs" 对象中
+		// [核心修正] 根据Dify服务器返回的明确错误，使用最终正确的Payload结构。
+		// "query" 必须是顶层参数，不能被 "inputs" 包裹。
 		const payload = {
-			"inputs": {
-				"query": query
-			},
+			"query": query,
 			"response_mode": "streaming",
 			"user": USER_ID,
 			"conversation_id": conversationId || ''
