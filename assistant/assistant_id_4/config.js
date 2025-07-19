@@ -20,11 +20,11 @@ const CHATGPT_MODEL_NAME = 'o1' // 或 'gpt-4o'
 // 3. [新增] 为所有调试参数设置默认值
 const DEFAULT_CONFIG = {
 	systemPrompt: '你是一个由OpenAI训练的AI助手，请友好并有帮助地回答问题。',
-	temperature: 0.7,      // 温度：控制随机性，越高越随机 (0-2)
-	top_p: 1.0,            // Top P：控制核心词汇范围 (0-1)
+	//temperature: 0.7,      // 温度：控制随机性，越高越随机 (0-2)
+	//top_p: 1.0,            // Top P：控制核心词汇范围 (0-1)
 	max_completion_tokens: 2048,      // 最大Token数：限制单次回复的长度
-	presence_penalty: 0.0, // 存在惩罚：-2.0到2.0，正值会鼓励模型谈论新话题
-	frequency_penalty: 0.0 // 频率惩罚：-2.0到2.0，正值会降低重复词语的概率
+	//presence_penalty: 0.0, // 存在惩罚：-2.0到2.0，正值会鼓励模型谈论新话题
+	//frequency_penalty: 0.0 // 频率惩罚：-2.0到2.0，正值会降低重复词语的概率
 }
 
 // ===================================================================
@@ -52,11 +52,11 @@ export function saveConfig(config) {
 	// [修改] 创建一个只包含可调参数的对象进行保存
 	const configToSave = {
 		systemPrompt: config.systemPrompt,
-		temperature: config.temperature,
-		top_p: config.top_p,
+		//temperature: config.temperature,
+		/top_p: config.top_p,
 		max_completion_tokens: config.max_completion_tokens,
-		presence_penalty: config.presence_penalty,
-		frequency_penalty: config.frequency_penalty,
+		//presence_penalty: config.presence_penalty,
+		//frequency_penalty: config.frequency_penalty,
 	};
 	storage.save(STORAGE_KEY, configToSave)
 }
