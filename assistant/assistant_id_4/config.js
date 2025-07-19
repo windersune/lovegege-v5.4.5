@@ -53,7 +53,7 @@ export function saveConfig(config) {
 	const configToSave = {
 		systemPrompt: config.systemPrompt,
 		//temperature: config.temperature,
-		/top_p: config.top_p,
+		//top_p: config.top_p,
 		max_completion_tokens: config.max_completion_tokens,
 		//presence_penalty: config.presence_penalty,
 		//frequency_penalty: config.frequency_penalty,
