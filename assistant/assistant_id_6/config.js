@@ -2,7 +2,7 @@
 
 // --- 配置 ---
 const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t"
-const API_BASE_URL = "'https://apilovegege.com/dify"
+const API_BASE_URL = "https://apilovegege.com/dify"
 const WORKFLOW_ENDPOINT = `${API_BASE_URL}/v1/workflows/run`
 const USER_ID = "mada-123"
 
