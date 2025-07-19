@@ -14,7 +14,7 @@ export const useAssistantStore = defineStore('assistant', {
       {
         id: '2',
         name: 'GPT女皇',
-        description: '出身于o4-mini-deep-research，娇弱身姿压制GPT阿布。',
+        description: '出身于o3-mini，娇弱身姿压制GPT阿布。',
         avatar: '/images/7.12-2.jpg',
         available: true,
         supportsImage: true
