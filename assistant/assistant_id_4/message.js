@@ -58,11 +58,11 @@ export async function getResponse(messages) {
 		
 		// [新增] 从config对象中读取所有调试参数
 		// 使用Number()和parseInt()确保类型正确，防止从localStorage读取时变成字符串
-		temperature: Number(config.temperature),
-		top_p: Number(config.top_p),
+		//temperature: Number(config.temperature),
+		//top_p: Number(config.top_p),
 		max_completion_tokens: parseInt(config.max_completion_tokens, 10),
-		presence_penalty: Number(config.presence_penalty),
-		frequency_penalty: Number(config.frequency_penalty),
+		//presence_penalty: Number(config.presence_penalty),
+		//frequency_penalty: Number(config.frequency_penalty),
 	};
 
 	// fetch调用部分保持原样，它现在会发送包含所有参数的requestBody
