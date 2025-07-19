@@ -47,7 +47,7 @@ export const useAssistantStore = defineStore('assistant', {
       {
         id: '6',
         name: 'dify小助手',
-        description: '基于dify的workflow各种玩法，目前接入gemini-2.5-pro！,
+        description: '基于dify的workflow各种玩法，目前接入gemini-2.5-pro！',
         avatar: '/images/general-assistant.jpg',
         available: true,
         supportsImage: false
