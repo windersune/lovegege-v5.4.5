@@ -1,78 +1,74 @@
 import { loadConfig } from './config.js'
+// 【新】: 引入 @gradio/client 库
+import { client } from "https://esm.sh/@gradio/client";
 
 /**
- * [核心修改] 完全按照能正常工作的HTML示例，获取API响应。
+ * [核心重构] 使用 @gradio/client 和 for-await-of 循环获取流式响应
  * @param {Array<Object>} messages - 聊天历史记录
- * @returns {AsyncGenerator} - 产出单个包含完整回复的对象的异步生成器
+ * @returns {AsyncGenerator} - 产出包含增量内容({delta: {content: "..."}})的对象的异步生成器
  */
-export async function getResponse(messages) {
+export async function* getResponse(messages) {
 	// 加载包含正确 baseURL 的配置
 	const config = loadConfig();
 
-	// 1. 提取最后一条用户消息作为 prompt
+	// 1. 提取最后一条用户消息作为 prompt (逻辑保持不变)
 	const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
 	if (!lastUserMessage) {
 		throw new Error("消息历史中没有找到用户消息。");
 	}
-
 	const promptText = typeof lastUserMessage.content === 'string' 
 		? lastUserMessage.content 
 		: lastUserMessage.content.find(p => p.type === 'text')?.text || '';
-
 	if (!promptText) {
 		throw new Error("无法从最后一条用户消息中提取文本内容。");
 	}
-
-	// 2. [重要] 构建与HTML示例完全一致的请求体
-	const requestBody = {
-		"fn_index": 0,
-		"data": [
-			promptText
-		],
-		"session_hash": "a" + Math.random().toString(36).substring(2)
-	};
     
-	// 3. 使用异步生成器，以便返回一个符合UI预期的对象
-	return (async function*() {
-		try {
-			// 4. 发起 fetch 请求
-			const response = await fetch(config.baseURL, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify(requestBody),
-			});
+    // 用于存储上一次的完整回复，以便计算增量
+    let lastFullReply = "";
 
-			if (!response.ok) {
-				const errorText = await response.text();
-				throw new Error(`服务器错误: ${response.status}. 响应: ${errorText}`);
-			}
+	try {
+        // 2. 连接到您的应用根地址
+		const app = await client(config.baseURL);
 
-			// 5. [重要] 等待并解析完整的JSON响应，而不是流式读取
-			const result = await response.json();
+        // 3. 提交任务到 /chat API，获取异步可迭代的 job 对象
+        //    参数必须是数组，按顺序对应Python函数的参数
+		const job = app.submit('/chat', [
+			promptText,
+			[] // 此处传入空数组作为 history
+		]);
 
-			// 6. 从返回的JSON中提取回复
-            //    根据HTML示例，回复在 result.data 数组的第一个元素
-			const modelReply = result.data[0];
+        // 4. 【最终正确逻辑】: 使用 for await...of 循环来处理异步流
+		for await (const chunk of job) {
+            // chunk 的标准结构是 { data: ["完整的回复..."] }
+			const currentFullReply = chunk.data[0];
+            
+            // 5. 计算本次新增的文本 (delta)
+            const delta = currentFullReply.substring(lastFullReply.length);
+            lastFullReply = currentFullReply; // 更新记录
 
-            if (typeof modelReply === 'undefined') {
-                console.error("服务器返回的完整JSON:", result);
-                throw new Error("从服务器返回的数据中找不到有效的回复 (result.data[0] is undefined)。");
+            if (delta) {
+                // 6. 将增量文本包装成UI兼容的格式并产出
+                yield {
+                    choices: [{
+                        delta: {
+                            content: delta
+                        }
+                    }]
+                };
             }
-
-			// 7. 将完整的回复包装成UI兼容的格式并产出一次
-			yield {
-				choices: [{
-					delta: {
-						content: modelReply
-					}
-				}]
-			};
-
-		} catch (error) {
-			console.error("API 调用失败:", error);
-			throw error; // 将错误向上抛出，让UI可以捕获
 		}
-	})();
+
+	} catch (error) {
+		console.error("Gradio API 调用失败:", error);
+		// 将错误格式化并向上抛出，让UI可以捕获并显示
+        const errorMessage = `API 调用出错: ${error.message}`;
+        yield {
+            choices: [{
+                delta: {
+                    content: errorMessage
+                }
+            }]
+        };
+		throw new Error(errorMessage);
+	}
 }
