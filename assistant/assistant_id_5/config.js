@@ -10,7 +10,7 @@ const STORAGE_KEY = 'hf_space_config'
 // 1. 您的Cloudflare Worker代理的目标API地址
 //    [重要] gradio_client 会自动将 api_name="/chat" 转换为 /run/chat 的请求路径。
 //    所以我们在这里必须使用完整的、真实的请求URL。
-const HUGGINGFACE_API_URL = 'https://apilovegege.com/run/chat'
+const HUGGINGFACE_API_URL = 'https://apilovegege.com/run/predict'
 
 // 2. 您调用的模型或Space的描述
 const HF_MODEL_NAME = 'Hugging Face Space API (via Gradio)'
