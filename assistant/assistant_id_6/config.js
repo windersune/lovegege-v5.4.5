@@ -1,4 +1,5 @@
-
+// 文件: config.js
+// [最终正确版 - 修正了文件对象的结构]
 
 const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t";
 const API_BASE_URL = "https://apilovegege.com/dify";
@@ -9,12 +10,12 @@ export async function* getDifyChatResponseAsStream(query, imageBase64 = null, co
 	try {
 		const inputs = {};
 
-		// 【核心修正】: 当有图片时，我们构建一个完整的 "文件对象"
+		// 【核心修正】: 移除 "transfer_method" 键，简化文件对象
 		if (imageBase64) {
-			inputs.image = { // "image" 键名必须与Dify后台创建的变量名完全一致
+			inputs.image = { // "image" 键名与Dify后台变量名一致
 				"type": "image",
-				"transfer_method": "base64",
-				"content": imageBase64 // <-- 将纯净的Base64字符串作为 content 的值
+				// "transfer_method": "base64", // <--- 移除这一行错误的代码
+				"content": imageBase64
 			};
 		}
 
@@ -28,6 +29,7 @@ export async function* getDifyChatResponseAsStream(query, imageBase64 = null, co
 		
 		console.log("[Dify] 发送给API的最终Payload:", JSON.stringify(payload, null, 2));
 
+		// 后续的 fetch 和流处理逻辑完全不变
 		const response = await fetch(CHAT_ENDPOINT, {
 			method: 'POST',
 			headers: {
@@ -42,7 +44,6 @@ export async function* getDifyChatResponseAsStream(query, imageBase64 = null, co
 			throw new Error(`请求失败 (${response.status})，响应: ${errorText}`);
 		}
 		
-		// 后续的流处理逻辑完全不变
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder('utf-8');
 		while (true) {
