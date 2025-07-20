@@ -1,31 +1,46 @@
-// message.js
-
-// 1. 从重构后的 config.js 中导入函数
 import { uploadFileToDify, getDifyChatResponseAsStream } from './config.js';
 
-// 2. 维护对话ID以支持上下文
+// 维护对话ID
 let currentConversationId = null;
 
 /**
- * 编排文件上传和流式聊天。
- * @param {Array<Object>} messages - 聊天历史记录。
- *   - 对于图文消息，期望的 content 格式为:
- *     [{type: 'text', text: '...'}, {type: 'image', file: File}]
- * @returns {AsyncGenerator} - 返回符合标准AI聊天UI库格式的数据块。
+ * 一个帮助函数，将Data URL (Base64) 转换为 File 对象
+ * @param {string} dataUrl - 包含MIME类型和Base64数据的完整Data URL
+ * @param {string} filename - 要创建的文件的名称
+ * @returns {File} - 转换后的 File 对象
+ */
+function dataURLtoFile(dataUrl, filename) {
+    const arr = dataUrl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    if (!mimeMatch) {
+        throw new Error('无法从Data URL中解析MIME类型');
+    }
+    const mime = mimeMatch[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
+}
+
+
+/**
+ * 编排文件上传和流式聊天，能正确处理前端发来的Data URL
+ * @param {Array<Object>} messages - 聊天历史记录
+ * @returns {AsyncGenerator}
  */
 export async function* getResponse(messages) {
-	// 3. 找到最新的用户消息
 	const latestUserMessage = messages.findLast(msg => msg.role === 'user');
 
 	if (!latestUserMessage || !latestUserMessage.content) {
-		// 返回一个空的或提示性的消息
 		yield { choices: [{ delta: { content: "抱歉，没有收到任何有效消息。" } }] };
 		return;
 	}
 
-	// 4. 从消息体中解析出文本和 File 对象
 	let userQuery = '';
-	let fileToUpload = null; // 用于存储待上传的 File 对象
+	let fileToUpload = null; // 目标是填充这个 File 对象
 	const { content } = latestUserMessage;
 
 	if (typeof content === 'string') {
@@ -35,9 +50,16 @@ export async function* getResponse(messages) {
 			if (part.type === 'text') {
 				userQuery = part.text;
 			}
-			// 直接从消息中获取 File 对象
-			if (part.type === 'image' && part.file instanceof File) {
-				fileToUpload = part.file;
+			// 【核心修正】: 识别前端的 'image_url' 类型并进行转换
+			if (part.type === 'image_url' && part.image_url && part.image_url.url) {
+                console.log("[Dify] 检测到 'image_url' 格式，正在转换为File对象...");
+				try {
+                    // 使用帮助函数将 data: URL 转换为 File 对象
+                    fileToUpload = dataURLtoFile(part.image_url.url, "uploaded_image.png");
+				} catch (e) {
+                    console.error("[Dify] Data URL 转换失败:", e);
+                    // 可以在这里向用户返回一个错误
+                }
 			}
 		}
 	}
@@ -46,43 +68,36 @@ export async function* getResponse(messages) {
 
 	try {
         // ===================================================================
-        // 步骤一: 如果有文件，调用新的上传函数
+        // 步骤一: 如果成功转换出文件，就上传它
         // ===================================================================
         if (fileToUpload) {
-            console.log("[Dify] 检测到文件对象，开始上传...");
-            fileId = await uploadFileToDify(fileToUpload); // 传递 File 对象
+            console.log("[Dify] File对象转换成功，开始上传...");
+            fileId = await uploadFileToDify(fileToUpload); // config.js 中的函数可以保持不变
             console.log(`[Dify] 文件上传成功，获得File ID: ${fileId}`);
+        } else {
+            console.log("[Dify] 本次消息中不包含有效文件。");
         }
 
         // ===================================================================
-        // 步骤二: 调用聊天API，无论是否有文件
+        // 步骤二: 调用聊天API
         // ===================================================================
         console.log(`[Dify] 调用聊天API -> 文本: "${userQuery}" | 文件ID: ${fileId} | 对话ID: ${currentConversationId}`);
         const stream = getDifyChatResponseAsStream(userQuery, fileId, currentConversationId);
 
-        // 7. 消费流式响应，并更新对话ID
+        // 后续逻辑保持不变...
         for await (const chunk of stream) {
-            // 假设Dify流返回的数据结构中有 answer 字段
             const contentChunk = chunk.answer; 
-            
             if (contentChunk) {
-                // 产出符合通用UI库的数据格式
-                yield {
-                    choices: [{ delta: { content: contentChunk } }]
-                };
+                yield { choices: [{ delta: { content: contentChunk } }] };
             }
-            
-            // 在流式响应的事件中，持续更新会话ID
             if (chunk.conversation_id) {
                 currentConversationId = chunk.conversation_id;
             }
         }
-
         console.log(`[Dify] 流式传输结束。最终会话ID更新为: ${currentConversationId}`);
 
 	} catch (error) {
 		console.error(`[Dify] 端到端流程出错: ${error.message}`);
-		// 以同样的数据格式返回错误信息，以便UI能够展示
 		yield {
 			choices: [{
 				delta: { content: `\n\n[Dify API 调用错误]: ${error.message}` }
