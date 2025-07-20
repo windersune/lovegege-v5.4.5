@@ -1,6 +1,3 @@
-// 文件: config.js
-// [最终正确版 - 遵循Dify自定义变量的API调用模式]
-
 const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t";
 const API_BASE_URL = "https://apilovegege.com/dify";
 const CHAT_ENDPOINT = `${API_BASE_URL}/v1/chat-messages`;
@@ -50,7 +47,7 @@ export async function uploadFileToDify(dataUrl) {
 
 
 /**
- * 步骤二 - 发送聊天消息，并在 inputs 字段中附带文件ID
+ * 步骤二 - 发送聊天消息，并在 files 字段中附带文件ID
  * @param {string} query - 用户的文本输入.
  * @param {string | null} fileId - 从上一步获取的文件ID.
  * @param {string | null} conversationId - 对话上下文ID.
@@ -58,22 +55,23 @@ export async function uploadFileToDify(dataUrl) {
  */
 export async function* getDifyChatResponseAsStream(query, fileId = null, conversationId = null) {
 	try {
-		const inputs = {};
-
-		// 【核心修正】: 如果有文件ID，将其作为 inputs 对象的一个属性
-		//    属性的键名("image")必须与您在Dify后台创建的变量名完全一致！
-		if (fileId) {
-			inputs.image = fileId; 
-		}
-
+		// 【核心修正】: 构建符合官方文档的最终Payload
 		const payload = {
-			"inputs": inputs, // <-- 将我们构建好的 inputs 对象放进去
+			"inputs": {}, // inputs 对象保持为空，因为文件信息在 files 字段中
 			"query": query,
 			"response_mode": "streaming",
 			"user": USER_ID,
 			"conversation_id": conversationId || '',
-			// 我们不再需要 "files" 字段了！
+			"files": [] // <-- 初始化 files 数组
 		};
+
+        // 【核心修正】: 如果有文件ID，构建正确的对象并推入 files 数组
+		if (fileId) {
+			payload.files.push({
+				"type": "image",
+				"upload_file_id": fileId // <-- 使用官方指定的 `upload_file_id` 键
+			});
+		}
 		
 		console.log("[Dify] 发送给聊天API的最终Payload:", JSON.stringify(payload, null, 2));
 
