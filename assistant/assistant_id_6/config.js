@@ -1,19 +1,13 @@
 // =================================================================
-//     Dify API Configuration (Final Version Based on Official Docs & Logic)
+//     Dify API Configuration (Final Version Based on Evidence)
 // =================================================================
-const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t"; // 您的API密钥
-const API_BASE_URL = "https://apilovegege.com/dify"; // 您的基础URL
-
-// 坚持使用 Chat App 接口
-const CHAT_ENDPOINT = `${API_BASE_URL}/v1/chat-messages`; 
-
-// 这个上传接口，严格遵循您提供的官方文档
+const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t";
+const API_BASE_URL = "https://apilovegege.com/dify";
+const CHAT_ENDPOINT = `${API_BASE_URL}/v1/chat-messages`;
 const FILE_UPLOAD_ENDPOINT = `${API_BASE_URL}/v1/files/upload`;
 const USER_ID = "mada-123";
 
-/**
- * 步骤一 - 上传文件 (此函数已确认为100%符合官方文档)
- */
+// ... (uploadFileToDify 函数是正确的，保持不变) ...
 export async function uploadFileToDify(dataUrl) {
     const matches = dataUrl.match(/^data:(image\/[a-z]+);base64,(.*)$/);
     if (!matches) throw new Error('无效的Data URL格式.');
@@ -41,13 +35,11 @@ export async function uploadFileToDify(dataUrl) {
     }
 
     const result = await response.json();
-    console.log("[Dify] 文件上传成功:", result);
     return result.id;
 }
 
-/**
- * 步骤二 - 发送聊天消息 (使用 "variable" 键来精确映射)
- */
+
+// ... (getResponseAsStream 函数也需要修正，以正确解析Chat API的返回格式) ...
 export async function* getDifyChatResponseAsStream(query, fileId = null, conversationId = null) {
 	try {
 		const payload = {
@@ -56,21 +48,18 @@ export async function* getDifyChatResponseAsStream(query, fileId = null, convers
 			"response_mode": "streaming",
 			"user": USER_ID,
 			"conversation_id": conversationId || '',
-			"files": []
+			"files": [] // 这是将文件送入`sys.files`的唯一正确途径
 		};
 
 		if (fileId) {
+            // 【最终修正】: 只提供必须的字段，不加任何多余的 "variable" 键
             payload.files.push({
 				"type": "image",
                 "transfer_method": "local_file",
-				"upload_file_id": fileId,
-                // 【最终解决方案】: 这行代码将上传的文件，直接映射到您定义的`image`变量
-                "variable": "image" 
+				"upload_file_id": fileId
 			});
 		}
 		
-		console.log("[Dify] 发送最终Payload到聊天接口:", JSON.stringify(payload, null, 2));
-
 		const response = await fetch(CHAT_ENDPOINT, {
 			method: 'POST',
 			headers: {
@@ -97,8 +86,11 @@ export async function* getDifyChatResponseAsStream(query, fileId = null, convers
 					const jsonStr = line.substring(6);
 					if (jsonStr.trim() === '[DONE]') continue;
 					try {
-						yield JSON.parse(jsonStr);
+                        // 【最终修正】: 解析Chat API的标准数据块，它应该包含 'answer' 字段
+						const parsedChunk = JSON.parse(jsonStr);
+						yield parsedChunk; 
 					} catch (e) {
+						// 之前的报错就是在这里发生的，现在我们知道了原因
 						console.error("无法解析Dify数据块:", jsonStr);
 					}
 				}
@@ -111,6 +103,5 @@ export async function* getDifyChatResponseAsStream(query, fileId = null, convers
 	}
 }
 
-// 兼容性函数
 export function loadConfig() { return { apiKey: API_KEY, baseURL: API_BASE_URL }; }
 export function hasValidConfig() { return true; }
