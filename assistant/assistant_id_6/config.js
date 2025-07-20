@@ -71,13 +71,14 @@ export async function* getDifyChatResponseAsStream(query, fileId = null, convers
 			"response_mode": "streaming",
 			"user": USER_ID,
 			"conversation_id": conversationId || '',
-			"files": [] // <-- 初始化 files 数组
+			"files": [] 
 		};
 
         // 【核心】: 如果有文件ID，构建正确的对象并推入 files 数组
 		if (fileId) {
 			payload.files.push({
 				"type": "image",
+				"transfer_method": "local_file", 
 				"upload_file_id": fileId // <-- 使用官方指定的 `upload_file_id` 键
 			});
 		}
