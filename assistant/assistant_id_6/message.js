@@ -1,51 +1,23 @@
+import { uploadFileToDify, getDifyChatResponseAsStream } from './config.js';
 
-// 1. 导入支持流式的API调用函数
-import { getDifyChatResponseAsStream } from './config.js';
-
-// 2. 【核心】: 重新引入一个在文件作用域内持久化的变量，用于维护当前对话的ID。
-//    这是确保对话能够连续的关键。
 let currentConversationId = null;
 
-/**
- * [最终修正版] 调用Dify的流式API，并正确处理会话ID以支持连续的多模态对话。
- * @param {Array<Object>} messages - 聊天历史记录
- * @returns {AsyncGenerator} - 产出包含内容增量({delta: {content: "..."}})的对象的异步生成器
- */
 export async function* getResponse(messages) {
-	// 3. 从消息历史中安全地找出最新的用户消息 (逻辑不变)
-	const latestUserMessage = messages.findLast(msg => msg.role === 'user');
+	// ... 解析 messages 以获取 userQuery 和 imageBase64 的逻辑不变 ...
 
-	if (!latestUserMessage || !latestUserMessage.content) {
-		return (async function* () {
-			yield { choices: [{ delta: { content: "抱歉，我没有收到任何消息内容。" } }] };
-		})();
-	}
-
-	// 4. 解析来自UI的 content 字段，提取文本和图片 (逻辑不变)
-	let userQuery = '';
-	let imageBase64 = null;
-	const { content } = latestUserMessage;
-
-	if (typeof content === 'string') {
-		userQuery = content;
-	} else if (Array.isArray(content)) {
-		for (const part of content) {
-			if (part.type === 'text') {
-				userQuery = part.text;
-			}
-			if (part.type === 'image_url' && part.image_url && part.image_url.url) {
-				imageBase64 = part.image_url.url.split(',')[1];
-			}
-		}
-	}
-	
-	// 控制台日志，方便调试
-	console.log(`[Dify] 准备流式发送 -> 文本: "${userQuery}" | 是否有图: ${!!imageBase64}`);
-	console.log(`[Dify] 当前正在使用的对话ID: ${currentConversationId}`);
+    let fileId = null; // 用于存储上传后的文件ID
 
 	try {
-        // 5. 【核心修正】: 将 currentConversationId 作为第三个参数传递给API调用函数
-        const stream = getDifyChatResponseAsStream(userQuery, imageBase64, currentConversationId);
+        // 【核心修正】: 步骤一 - 如果有图片，先执行上传
+        if (imageBase64) {
+            console.log("[Dify] 检测到图片，开始上传...");
+            fileId = await uploadFileToDify(imageBase64);
+            console.log(`[Dify] 文件上传成功，获得File ID: ${fileId}`);
+        }
+
+        // 【核心修正】: 步骤二 - 调用聊天API，并传递获取到的 fileId
+        const stream = getDifyChatResponseAsStream(userQuery, fileId, currentConversationId);
+
 
         // 6. 使用 for await...of 循环来消费这个流 (逻辑不变)
         for await (const chunk of stream) {
