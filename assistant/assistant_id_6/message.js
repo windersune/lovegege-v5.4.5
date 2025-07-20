@@ -1,7 +1,3 @@
-// 文件: message.js (用于Dify)
-// [最终正确版 - 编排文件上传和聊天两个步骤]
-
-// 1. 从config.js中导入两个独立的函数：一个用于上传，一个用于聊天
 import { uploadFileToDify, getDifyChatResponseAsStream } from './config.js';
 
 // 2. 维护当前对话ID，以支持上下文连续性
