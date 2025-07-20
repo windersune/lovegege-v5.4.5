@@ -1,28 +1,31 @@
-// 1. 从config.js中导入两个独立的函数
+// message.js
+
+// 1. 从重构后的 config.js 中导入函数
 import { uploadFileToDify, getDifyChatResponseAsStream } from './config.js';
 
-// 2. 维护当前对话ID，以支持上下文连续性
+// 2. 维护对话ID以支持上下文
 let currentConversationId = null;
 
 /**
- * [最终正确版] 编排文件上传和流式聊天，并正确传递完整Data URL。
- * @param {Array<Object>} messages - 聊天历史记录
- * @returns {AsyncGenerator} - 产出包含内容增量({delta: {content: "..."}})的对象的异步生成器
+ * 编排文件上传和流式聊天。
+ * @param {Array<Object>} messages - 聊天历史记录。
+ *   - 对于图文消息，期望的 content 格式为:
+ *     [{type: 'text', text: '...'}, {type: 'image', file: File}]
+ * @returns {AsyncGenerator} - 返回符合标准AI聊天UI库格式的数据块。
  */
 export async function* getResponse(messages) {
-	// 3. 从消息历史中安全地找出最新的用户消息
+	// 3. 找到最新的用户消息
 	const latestUserMessage = messages.findLast(msg => msg.role === 'user');
 
 	if (!latestUserMessage || !latestUserMessage.content) {
-		return (async function* () {
-			yield { choices: [{ delta: { content: "抱歉，我没有收到任何消息内容。" } }] };
-		})();
+		// 返回一个空的或提示性的消息
+		yield { choices: [{ delta: { content: "抱歉，没有收到任何有效消息。" } }] };
+		return;
 	}
 
-	// 4. 解析来自UI的 content 字段，提取文本和图片
+	// 4. 从消息体中解析出文本和 File 对象
 	let userQuery = '';
-    // 【核心修正】: 使用更准确的变量名，并准备接收完整的Data URL
-	let imageDataUrl = null; 
+	let fileToUpload = null; // 用于存储待上传的 File 对象
 	const { content } = latestUserMessage;
 
 	if (typeof content === 'string') {
@@ -32,56 +35,57 @@ export async function* getResponse(messages) {
 			if (part.type === 'text') {
 				userQuery = part.text;
 			}
-			// 【核心修正】: 直接获取完整的 part.image_url.url
-			if (part.type === 'image_url' && part.image_url && part.image_url.url) {
-				imageDataUrl = part.image_url.url; 
+			// 直接从消息中获取 File 对象
+			if (part.type === 'image' && part.file instanceof File) {
+				fileToUpload = part.file;
 			}
 		}
 	}
-	
+
 	let fileId = null;
 
 	try {
         // ===================================================================
-        // 步骤一 - 如果有图片，调用上传API
+        // 步骤一: 如果有文件，调用新的上传函数
         // ===================================================================
-        if (imageDataUrl) {
-            console.log("[Dify] 检测到图片，开始上传...");
-            // 【核心修正】: 将完整的 imageDataUrl 传递给上传函数
-            fileId = await uploadFileToDify(imageDataUrl);
+        if (fileToUpload) {
+            console.log("[Dify] 检测到文件对象，开始上传...");
+            fileId = await uploadFileToDify(fileToUpload); // 传递 File 对象
             console.log(`[Dify] 文件上传成功，获得File ID: ${fileId}`);
         }
 
         // ===================================================================
-        // 步骤二 - 调用聊天API
+        // 步骤二: 调用聊天API，无论是否有文件
         // ===================================================================
-        console.log(`[Dify] 开始调用聊天API -> 文本: "${userQuery}" | 文件ID: ${fileId} | 对话ID: ${currentConversationId}`);
+        console.log(`[Dify] 调用聊天API -> 文本: "${userQuery}" | 文件ID: ${fileId} | 对话ID: ${currentConversationId}`);
         const stream = getDifyChatResponseAsStream(userQuery, fileId, currentConversationId);
 
-        // 7. 使用 for await...of 循环消费聊天数据流 (逻辑不变)
+        // 7. 消费流式响应，并更新对话ID
         for await (const chunk of stream) {
+            // 假设Dify流返回的数据结构中有 answer 字段
             const contentChunk = chunk.answer; 
             
             if (contentChunk) {
+                // 产出符合通用UI库的数据格式
                 yield {
-                    choices: [{
-                        delta: { content: contentChunk }
-                    }]
+                    choices: [{ delta: { content: contentChunk } }]
                 };
             }
             
+            // 在流式响应的事件中，持续更新会话ID
             if (chunk.conversation_id) {
                 currentConversationId = chunk.conversation_id;
             }
         }
 
-        console.log(`[Dify] 流式传输结束。最终会话ID已更新为: ${currentConversationId}`);
+        console.log(`[Dify] 流式传输结束。最终会话ID更新为: ${currentConversationId}`);
 
 	} catch (error) {
-		console.error(`[Dify] 完整流程出错: ${error.message}`);
+		console.error(`[Dify] 端到端流程出错: ${error.message}`);
+		// 以同样的数据格式返回错误信息，以便UI能够展示
 		yield {
 			choices: [{
-				delta: { content: `\n\n[Dify API 错误] ${error.message}` }
+				delta: { content: `\n\n[Dify API 调用错误]: ${error.message}` }
 			}]
 		};
 	}
