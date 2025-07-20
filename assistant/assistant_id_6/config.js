@@ -1,3 +1,6 @@
+// 文件: config.js
+// [最终正确版 - 完全遵循官方文档]
+
 const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t";
 const API_BASE_URL = "https://apilovegege.com/dify";
 const CHAT_ENDPOINT = `${API_BASE_URL}/v1/chat-messages`;
@@ -5,32 +8,40 @@ const FILE_UPLOAD_ENDPOINT = `${API_BASE_URL}/v1/files/upload`;
 const USER_ID = "mada-123";
 
 /**
- * 步骤一 - 上传文件到Dify并获取文件ID (此函数已验证正确，无需改动)
+ * 步骤一 - 上传文件到Dify并获取文件ID
  * @param {string} dataUrl - 包含MIME类型和Base64数据的完整Data URL
  * @returns {Promise<string>} - 返回上传成功后的文件ID.
  */
 export async function uploadFileToDify(dataUrl) {
+    // 1. 从Data URL中动态解析出MIME类型和纯Base64数据
     const matches = dataUrl.match(/^data:(image\/[a-z]+);base64,(.*)$/);
-    if (!matches) throw new Error('无效的Data URL格式。');
-    
-    const mimeType = matches[1];
+    if (!matches) {
+        throw new Error('无效的Data URL格式。');
+    }
+    const mimeType = matches[1]; // 例如 "image/jpeg"
     const imageBase64 = matches[2];
 
+    // 2. 将 Base64 字符串解码为二进制数据
     const byteCharacters = atob(imageBase64);
     const byteNumbers = new Array(byteCharacters.length);
     for (let i = 0; i < byteCharacters.length; i++) {
         byteNumbers[i] = byteCharacters.charCodeAt(i);
     }
     const byteArray = new Uint8Array(byteNumbers);
+    
+    // 3. 用二进制数据和正确的MIME类型创建Blob对象
     const blob = new Blob([byteArray], { type: mimeType });
 
+    // 4. 创建 FormData 并添加字段，严格遵循官方文档
     const formData = new FormData();
-    formData.append('file', blob, 'image.jpg');
-    formData.append('user', USER_ID);
+    formData.append('file', blob, 'image.jpg'); // `file`是必需的字段名
+    formData.append('user', USER_ID);           // `user`是必需的字段名
 
+    // 5. 发送请求
     const response = await fetch(FILE_UPLOAD_ENDPOINT, {
         method: 'POST',
         headers: {
+            // 当使用 FormData 时，浏览器会自动设置正确的 'Content-Type: multipart/form-data' 和 boundary，我们不能手动设置
             'Authorization': `Bearer ${API_KEY}`,
         },
         body: formData
@@ -42,7 +53,8 @@ export async function uploadFileToDify(dataUrl) {
     }
 
     const result = await response.json();
-    return result.id;
+    console.log("[Dify] 文件上传成功，返回结果:", result);
+    return result.id; // 返回文件ID
 }
 
 
@@ -55,9 +67,9 @@ export async function uploadFileToDify(dataUrl) {
  */
 export async function* getDifyChatResponseAsStream(query, fileId = null, conversationId = null) {
 	try {
-		// 【核心修正】: 构建符合官方文档的最终Payload
+		// 【核心】: 构建符合官方文档的最终Payload
 		const payload = {
-			"inputs": {}, // inputs 对象保持为空，因为文件信息在 files 字段中
+			"inputs": {}, // inputs 对象在此场景下为空
 			"query": query,
 			"response_mode": "streaming",
 			"user": USER_ID,
@@ -65,7 +77,7 @@ export async function* getDifyChatResponseAsStream(query, fileId = null, convers
 			"files": [] // <-- 初始化 files 数组
 		};
 
-        // 【核心修正】: 如果有文件ID，构建正确的对象并推入 files 数组
+        // 【核心】: 如果有文件ID，构建正确的对象并推入 files 数组
 		if (fileId) {
 			payload.files.push({
 				"type": "image",
@@ -75,7 +87,6 @@ export async function* getDifyChatResponseAsStream(query, fileId = null, convers
 		
 		console.log("[Dify] 发送给聊天API的最终Payload:", JSON.stringify(payload, null, 2));
 
-		// 后续的 fetch 和流处理逻辑完全不变
 		const response = await fetch(CHAT_ENDPOINT, {
 			method: 'POST',
 			headers: {
@@ -90,6 +101,7 @@ export async function* getDifyChatResponseAsStream(query, fileId = null, convers
 			throw new Error(`请求失败 (${response.status})，响应: ${errorText}`);
 		}
 		
+        // 后续的流处理逻辑完全不变
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder('utf-8');
 		while (true) {
