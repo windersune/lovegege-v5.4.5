@@ -1,14 +1,13 @@
-// 文件: message.js (用于Dify)
-// [最终流式版]
 
-// 1. 导入新的、支持流式的API调用函数
+// 1. 导入支持流式的API调用函数
 import { getDifyChatResponseAsStream } from './config.js';
 
-// 2. 维护当前对话ID，保持上下文连续性
+// 2. 【核心】: 重新引入一个在文件作用域内持久化的变量，用于维护当前对话的ID。
+//    这是确保对话能够连续的关键。
 let currentConversationId = null;
 
 /**
- * [最终流式版] 调用Dify的流式API，并以增量方式产出回复内容。
+ * [最终修正版] 调用Dify的流式API，并正确处理会话ID以支持连续的多模态对话。
  * @param {Array<Object>} messages - 聊天历史记录
  * @returns {AsyncGenerator} - 产出包含内容增量({delta: {content: "..."}})的对象的异步生成器
  */
@@ -42,18 +41,17 @@ export async function* getResponse(messages) {
 	
 	// 控制台日志，方便调试
 	console.log(`[Dify] 准备流式发送 -> 文本: "${userQuery}" | 是否有图: ${!!imageBase64}`);
-	console.log(`[Dify] 当前对话ID: ${currentConversationId}`);
+	console.log(`[Dify] 当前正在使用的对话ID: ${currentConversationId}`);
 
 	try {
-        // 5. 【核心改动】调用新的流式函数，它返回一个可供迭代的流 (stream)
+        // 5. 【核心修正】: 将 currentConversationId 作为第三个参数传递给API调用函数
         const stream = getDifyChatResponseAsStream(userQuery, imageBase64, currentConversationId);
 
-        // 6. 【核心改动】使用 for await...of 循环来消费这个流
+        // 6. 使用 for await...of 循环来消费这个流 (逻辑不变)
         for await (const chunk of stream) {
-            // Dify 流式响应中，增量内容通常在 chunk.answer 字段中
+            // Dify 流式响应中，增量内容在 chunk.answer 字段中
             const contentChunk = chunk.answer; 
             
-            // 7. 确保有内容才产出，避免空delta
             if (contentChunk) {
                 // 将每一个内容增量包装成UI期望的格式并产出
                 yield {
@@ -63,14 +61,14 @@ export async function* getResponse(messages) {
                 };
             }
             
-            // 8. 在流的过程中，持续更新会话ID
-            //    Dify 的流通常在每个数据块里都包含 conversation_id
+            // 7. 【核心修正】: 在流的过程中，用服务器返回的ID，持续更新我们的全局变量
+            //    这样下一次调用 getResponse 时，就会使用这个新的ID
             if (chunk.conversation_id) {
                 currentConversationId = chunk.conversation_id;
             }
         }
 
-        console.log(`[Dify] 流式传输结束。最终会话ID: ${currentConversationId}`);
+        console.log(`[Dify] 流式传输结束。最终会话ID已更新为: ${currentConversationId}`);
 
 	} catch (error) {
 		// 如果在API调用或流处理过程中出错，将详细错误信息显示在聊天窗口
