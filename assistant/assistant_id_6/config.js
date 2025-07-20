@@ -1,32 +1,38 @@
-// 在 config.js 中
+// 文件: config.js
+// [最终修正 - 解决 USER_ID is not defined 问题]
 
-// ... 其他代码不变 ...
+const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t"; // 您的Dify API密钥
+const API_BASE_URL = "https://apilovegege.com/dify"; // 您的Dify代理地址
+const CHAT_ENDPOINT = `${API_BASE_URL}/v1/chat-messages`;
+// 将 USER_ID 的定义保留在文件顶部，或者移到函数内部均可，但要确保其存在。
 
+/**
+ * [核心重构 - 流式函数]
+ * @param {string} query - 用户的文本输入.
+ * @param {string | null} imageBase64 - 纯净的Base64图片数据.
+ * @param {string | null} conversationId - 对话上下文ID.
+ * @returns {AsyncGenerator<object>} - 返回一个异步生成器，产出从API收到的原始数据块(chunk)。
+ */
 export async function* getDifyChatResponseAsStream(query, imageBase64 = null, conversationId = null) {
+	// 【核心修正】: 将 USER_ID 的定义放在函数内部，确保其作用域正确。
+	const USER_ID = "mada-123"; // 代表用户的唯一标识符
+
 	try {
-		// 1. 【核心修正】: inputs 对象不再是空的
 		const inputs = {};
-		
-		// 2. 【核心修正】: 如果有图片，将其作为 inputs 对象的一个属性
-		//    属性的键名("image")必须与您在Dify后台创建的变量名完全一致！
 		if (imageBase64) {
 			inputs.image = imageBase64;
 		}
 
-		// 3. 构建最终的Payload
 		const payload = {
-			"inputs": inputs, // <-- 将我们构建好的 inputs 对象放进去
+			"inputs": inputs,
 			"query": query,
 			"response_mode": "streaming",
-			"user": USER_ID,
+			"user": USER_ID, // <-- 现在这里可以安全地引用 USER_ID
 			"conversation_id": conversationId || ''
 		};
 		
-		// 注意：我们不再需要 "files" 字段了！
-		
 		console.log("[Dify] 发送给API的最终Payload:", JSON.stringify(payload, null, 2));
 
-		// 4. 后续的 fetch 和流处理逻辑完全不变
 		const response = await fetch(CHAT_ENDPOINT, {
 			method: 'POST',
 			headers: {
@@ -36,6 +42,7 @@ export async function* getDifyChatResponseAsStream(query, imageBase64 = null, co
 			body: JSON.stringify(payload)
 		});
 
+		// ... 后续的流处理逻辑完全不变 ...
 		if (!response.ok) {
 			const errorText = await response.text();
 			throw new Error(`请求失败 (${response.status})，响应: ${errorText}`);
@@ -71,4 +78,12 @@ export async function* getDifyChatResponseAsStream(query, imageBase64 = null, co
 	}
 }
 
-// ...
+
+// --- 兼容性函数 ---
+export function loadConfig() {
+	return { apiKey: API_KEY, baseURL: API_BASE_URL };
+}
+
+export function hasValidConfig() {
+	return true;
+}
