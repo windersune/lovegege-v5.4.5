@@ -1,5 +1,5 @@
 // 文件: config.js
-// [最终正确版 - 修正了文件对象的结构]
+// [最终正确版 - 修正了API文件对象的最终格式]
 
 const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t";
 const API_BASE_URL = "https://apilovegege.com/dify";
@@ -10,12 +10,12 @@ export async function* getDifyChatResponseAsStream(query, imageBase64 = null, co
 	try {
 		const inputs = {};
 
-		// 【核心修正】: 移除 "transfer_method" 键，简化文件对象
+		// 【核心修正】: 构建Dify API真正期望的、精确的文件对象结构
 		if (imageBase64) {
-			inputs.image = { // "image" 键名与Dify后台变量名一致
+			inputs.image = { // "image" 键名与Dify后台创建的变量名完全一致
 				"type": "image",
-				// "transfer_method": "base64", // <--- 移除这一行错误的代码
-				"content": imageBase64
+				"transfer_method": "local_file", // <-- 错误的值是'base64'，正确的值是'local_file'
+				"data": imageBase64             // <-- 错误的键是'content'，正确的键是'data'
 			};
 		}
 
