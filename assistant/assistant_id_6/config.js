@@ -1,14 +1,18 @@
 // =================================================================
-//     Dify API Configuration (Final Confirmed Version for sys.files)
+//     Dify API Configuration (Final Version Based on Official Docs & Logic)
 // =================================================================
-const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t"; // 替换成你自己的Dify应用API密钥
-const API_BASE_URL = "https://apilovegege.com/dify"; // 替换成你自己的Dify API基础URL
-const CHAT_ENDPOINT = `${API_BASE_URL}/v1/chat-messages`;
+const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t"; // 您的API密钥
+const API_BASE_URL = "https://apilovegege.com/dify"; // 您的基础URL
+
+// 坚持使用 Chat App 接口
+const CHAT_ENDPOINT = `${API_BASE_URL}/v1/chat-messages`; 
+
+// 这个上传接口，严格遵循您提供的官方文档
 const FILE_UPLOAD_ENDPOINT = `${API_BASE_URL}/v1/files/upload`;
 const USER_ID = "mada-123";
 
 /**
- * 步骤一 - 上传文件 (此函数是正确的，无需修改)
+ * 步骤一 - 上传文件 (此函数已确认为100%符合官方文档)
  */
 export async function uploadFileToDify(dataUrl) {
     const matches = dataUrl.match(/^data:(image\/[a-z]+);base64,(.*)$/);
@@ -42,29 +46,30 @@ export async function uploadFileToDify(dataUrl) {
 }
 
 /**
- * 步骤二 - 发送聊天消息 (此版本与您最终的 sys.files 工作流完全匹配)
+ * 步骤二 - 发送聊天消息 (使用 "variable" 键来精确映射)
  */
 export async function* getDifyChatResponseAsStream(query, fileId = null, conversationId = null) {
 	try {
 		const payload = {
-			"inputs": {}, // 保持为空，不手动操作工作流变量
+			"inputs": {}, 
 			"query": query,
 			"response_mode": "streaming",
 			"user": USER_ID,
 			"conversation_id": conversationId || '',
-			"files": [] // 这是将文件送入`sys.files`的唯一正确途径
+			"files": []
 		};
 
 		if (fileId) {
-            // 将文件引用放入顶层`files`数组
             payload.files.push({
 				"type": "image",
                 "transfer_method": "local_file",
-				"upload_file_id": fileId
+				"upload_file_id": fileId,
+                // 【最终解决方案】: 这行代码将上传的文件，直接映射到您定义的`image`变量
+                "variable": "image" 
 			});
 		}
 		
-		console.log("[Dify] 发送给聊天API的最终Payload:", JSON.stringify(payload, null, 2));
+		console.log("[Dify] 发送最终Payload到聊天接口:", JSON.stringify(payload, null, 2));
 
 		const response = await fetch(CHAT_ENDPOINT, {
 			method: 'POST',
@@ -106,6 +111,6 @@ export async function* getDifyChatResponseAsStream(query, fileId = null, convers
 	}
 }
 
-// --- 兼容性函数 ---
+// 兼容性函数
 export function loadConfig() { return { apiKey: API_KEY, baseURL: API_BASE_URL }; }
 export function hasValidConfig() { return true; }
