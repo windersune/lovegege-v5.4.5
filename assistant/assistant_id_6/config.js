@@ -1,8 +1,8 @@
 // config.js
 
 const API_KEY = "app-V8ZAbavCEJ20ZKlJ4dRJOr7t"; // 请替换为您的真实API Key
-// const API_BASE_URL = "https://apilovegege.com/dify"; // 暂时注释掉您的代理
-const API_BASE_URL = "https://api.dify.ai";         // 【临时修改为此行】
+const API_BASE_URL = "https://apilovegege.com/dify"; // 暂时注释掉您的代理
+//const API_BASE_URL = "https://api.dify.ai";         // 【临时修改为此行】
 const CHAT_ENDPOINT = `${API_BASE_URL}/v1/chat-messages`;
 const FILE_UPLOAD_ENDPOINT = `${API_BASE_URL}/v1/files/upload`;
 const USER_ID = "mada-123"; // 建议为每个终端用户生成独立的ID
